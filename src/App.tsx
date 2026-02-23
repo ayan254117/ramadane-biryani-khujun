@@ -1,0 +1,584 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, MapPin, Moon, Sun, Utensils, Loader2, ExternalLink, ChevronRight, Plus, X, Camera, CheckCircle2, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import Markdown from 'react-markdown';
+import { findBiryaniPlaces, getRamadanTimings } from './services/geminiService';
+import { cn } from './lib/utils';
+
+interface UserSpot {
+  id: number;
+  mosque_name: string;
+  area: string;
+  food_type: string;
+  lat: number;
+  lng: number;
+  images: string;
+  created_at: string;
+}
+
+export default function App() {
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [timingsLoading, setTimingsLoading] = useState(false);
+  const [results, setResults] = useState<{ text: string; places: any[] } | null>(null);
+  const [userSpots, setUserSpots] = useState<UserSpot[]>([]);
+  const [timings, setTimings] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    mosque: '',
+    area: '',
+    type: 'কাচ্চি বিরিয়ানি',
+    images: [] as string[],
+    commitment: false
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetchUserSpots();
+    let watchId: number;
+
+    if ("geolocation" in navigator) {
+      // Use watchPosition for live tracking
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const newLoc = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setLocation(newLoc);
+        },
+        (err) => {
+          console.error("Geolocation error:", err);
+          setError("লোকেশন অ্যাক্সেস পাওয়া যায়নি। সাধারণ সার্চ ব্যবহার করা হচ্ছে।");
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+
+    return () => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
+
+  const fetchUserSpots = async () => {
+    try {
+      const res = await fetch('/api/spots');
+      const data = await res.json();
+      if (data.success) {
+        setUserSpots(data.spots);
+      }
+    } catch (err) {
+      console.error("Failed to fetch spots", err);
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFormData(prev => ({
+            ...prev,
+            images: [...prev.images, reader.result as string]
+          }));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleSubmitSpot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!location) {
+      alert("স্পট যোগ করার জন্য অনুগ্রহ করে লোকেশন অ্যাক্সেস দিন।");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/spots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          lat: location.lat,
+          lng: location.lng
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddModal(false);
+        setFormData({ mosque: '', area: '', type: 'কাচ্চি বিরিয়ানি', images: [], commitment: false });
+        fetchUserSpots();
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("স্পট যোগ করতে ব্যর্থ হয়েছে");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (location) {
+      fetchTimings();
+    }
+  }, [location]);
+
+  const fetchTimings = async () => {
+    setTimingsLoading(true);
+    try {
+      const data = await getRamadanTimings(location?.lat, location?.lng);
+      setTimings(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTimingsLoading(false);
+    }
+  };
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in km
+  };
+
+  const handleSearch = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch latest spots from DB
+      const res = await fetch('/api/spots');
+      const data = await res.json();
+      
+      if (data.success) {
+        let spots = data.spots as UserSpot[];
+        
+        // If location is available, calculate distance and sort
+        if (location) {
+          spots = spots.map(spot => ({
+            ...spot,
+            distance: calculateDistance(location.lat, location.lng, spot.lat, spot.lng)
+          })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        }
+
+        setResults({ 
+          text: `আপনার আশেপাশে ${spots.length}টি বিরিয়ানি স্পট পাওয়া গেছে।`, 
+          places: spots 
+        });
+      }
+    } catch (err) {
+      setError("বিরিয়ানি স্পট খুঁজে পেতে ব্যর্থ হয়েছে। আবার চেষ্টা করুন।");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {/* Header */}
+      <header className="bg-[#5A5A40] text-white py-8 px-6 text-center relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+          <div className="grid grid-cols-8 gap-4 rotate-12 scale-150">
+            {Array.from({ length: 32 }).map((_, i) => (
+              <Utensils key={i} size={48} />
+            ))}
+          </div>
+        </div>
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative z-10"
+        >
+          <h1 className="font-serif text-4xl md:text-5xl font-bold mb-2 tracking-tight">
+            রমজানের বিরিয়ানি খুঁজুন
+          </h1>
+        </motion.div>
+      </header>
+
+      <main className="flex-1 max-w-4xl mx-auto w-full p-6 space-y-8">
+        {/* Timings Card */}
+        <section>
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#5A5A40]/10">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-serif text-2xl font-semibold flex items-center gap-2">
+                <Moon className="text-[#5A5A40]" size={24} />
+                আজকের সময়সূচী
+              </h2>
+              {location ? (
+                <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-3 py-1 rounded-full flex items-center gap-1">
+                  <MapPin size={12} /> আপনার এলাকা
+                </span>
+              ) : (
+                <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full">
+                  সাধারণ সময়
+                </span>
+              )}
+            </div>
+
+            {timingsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="animate-spin text-[#5A5A40]" size={32} />
+              </div>
+            ) : timings ? (
+              <div className="markdown-body prose prose-stone max-w-none">
+                <Markdown>{timings}</Markdown>
+              </div>
+            ) : (
+              <p className="text-stone-500 italic">সময়সূচী লোড হচ্ছে...</p>
+            )}
+          </div>
+        </section>
+
+        {/* Search Action */}
+        <section className="flex flex-col items-center gap-6">
+          <div className="flex flex-wrap justify-center gap-4">
+            <button
+              onClick={handleSearch}
+              disabled={loading}
+              className={cn(
+                "group relative flex items-center gap-3 px-8 py-4 bg-[#5A5A40] text-white rounded-full text-xl font-serif font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:hover:scale-100 shadow-lg shadow-[#5A5A40]/20",
+                loading && "cursor-not-allowed"
+              )}
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={24} />
+              ) : (
+                <Search size={24} />
+              )}
+              বিরিয়ানি খুঁজুন
+            </button>
+
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-3 px-8 py-4 bg-white text-[#5A5A40] border-2 border-[#5A5A40] rounded-full text-xl font-serif font-medium transition-all hover:bg-[#5A5A40]/5 hover:scale-105 active:scale-95 shadow-lg"
+            >
+              <Plus size={24} />
+              স্পট যোগ করুন
+            </button>
+          </div>
+          
+          {error && (
+            <p className="text-red-500 text-sm font-medium">{error}</p>
+          )}
+        </section>
+
+        {/* User Added Spots */}
+        {userSpots.length > 0 && (
+          <section className="space-y-6">
+            <h3 className="font-serif text-2xl font-bold flex items-center gap-2 text-[#5A5A40]">
+              <CheckCircle2 size={24} />
+              সদস্যদের যোগ করা স্পট
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {userSpots.map((spot) => (
+                <motion.div
+                  key={spot.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-white rounded-3xl overflow-hidden shadow-sm border border-[#5A5A40]/10 flex flex-col"
+                >
+                  {spot.images && JSON.parse(spot.images).length > 0 && (
+                    <div className="h-48 overflow-hidden">
+                      <img 
+                        src={JSON.parse(spot.images)[0]} 
+                        alt={spot.mosque_name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
+                      <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-2 py-1 rounded-full">
+                        {spot.food_type}
+                      </span>
+                    </div>
+                    <p className="text-stone-500 flex items-center gap-1 text-sm mb-4">
+                      <MapPin size={14} /> {spot.area}
+                    </p>
+                    <a 
+                      href={`https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-[#5A5A40] font-medium flex items-center gap-1 hover:underline"
+                    >
+                      ম্যাপে দেখুন <ExternalLink size={14} />
+                    </a>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Results */}
+        <AnimatePresence mode="wait">
+          {results && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
+            >
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-[#5A5A40]/10">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-serif text-2xl font-bold flex items-center gap-2">
+                    <Utensils size={24} className="text-[#5A5A40]" />
+                    খুঁজে পাওয়া বিরিয়ানি স্পট
+                  </h3>
+                  <span className="bg-[#5A5A40] text-white px-4 py-1 rounded-full text-sm font-bold">
+                    {results.places.length} টি পাওয়া গেছে
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {results.places.map((spot: any, idx: number) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-stone-100 bg-stone-50 hover:bg-stone-100 transition-all group"
+                    >
+                      {/* Photo if available */}
+                      {spot.images && JSON.parse(spot.images).length > 0 ? (
+                        <div className="w-full md:w-32 h-32 rounded-xl overflow-hidden flex-shrink-0">
+                          <img 
+                            src={JSON.parse(spot.images)[0]} 
+                            alt={spot.mosque_name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full md:w-32 h-32 rounded-xl bg-stone-200 flex items-center justify-center flex-shrink-0 text-stone-400">
+                          <Camera size={32} />
+                        </div>
+                      )}
+
+                      <div className="flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
+                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold">
+                              {spot.food_type}
+                            </span>
+                          </div>
+                          <p className="text-stone-500 flex items-center gap-1 text-sm mt-1">
+                            <MapPin size={14} /> {spot.area}
+                          </p>
+                        </div>
+
+                        <div className="mt-4 flex justify-between items-end">
+                          <div className="text-[#5A5A40]">
+                            {spot.distance !== undefined && (
+                              <p className="text-xs font-bold bg-[#5A5A40]/10 px-2 py-1 rounded-lg inline-block">
+                                {spot.distance.toFixed(2)} কিমি দূরে
+                              </p>
+                            )}
+                          </div>
+                          <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-[#5A5A40] text-white p-2 rounded-xl hover:scale-110 transition-transform"
+                          >
+                            <ExternalLink size={18} />
+                          </a>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Footer */}
+      <footer className="py-12 px-6 text-center border-t border-stone-100 bg-stone-50">
+        <div className="max-w-xs mx-auto space-y-4">
+          <p className="font-serif italic text-stone-500">Ramadanul Mubarak • রমজানুল মোবারক</p>
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#5A5A40] shadow-lg bg-white">
+              <img 
+                src="https://scontent.fdac198-1.fna.fbcdn.net/v/t39.30808-6/276117066_531931311625215_1068333546484135602_n.jpg?_nc_cat=103&ccb=1-7&_nc_sid=53a332&_nc_ohc=2cKlHPumgtMQ7kNvwHhUAgo&_nc_oc=Adn3hv--ncwdAy6m2YjT11M77Ck7doqtbKlYy1Kma07J8p0qYDYZf9JtzfbO3zkO6vc&_nc_zt=23&_nc_ht=scontent.fdac198-1.fna&_nc_gid=Atu6w-cMAgy8Q2_36aWtMw&oh=00_Afv4QZzqGIHR27-jQ01gp9ccmIoDGaGgztEpGJtfyFaPsw&oe=69A22E4A" 
+                alt="Abdul Latif Ayan"
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/avataaars/svg?seed=Ayan";
+                }}
+              />
+            </div>
+            <div>
+              <p className="text-stone-400 text-[10px] uppercase tracking-widest mb-1">Developed By</p>
+              <a 
+                href="https://www.facebook.com/abdullatifayan321" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="font-bold text-stone-800 hover:text-[#5A5A40] transition-colors flex items-center gap-2 justify-center text-lg"
+              >
+                Abdul Latif Ayan
+                <ExternalLink size={16} />
+              </a>
+            </div>
+          </div>
+          <p className="text-stone-400 text-[10px] mt-4">© 2026 Ramadane Biryani Khujun</p>
+        </div>
+      </footer>
+
+      {/* Add Spot Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-stone-100 flex justify-between items-center">
+                <h3 className="font-serif text-2xl font-bold text-[#5A5A40]">নতুন স্পট যোগ করুন</h3>
+                <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <form onSubmit={handleSubmitSpot} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-stone-600">মসজিদের নাম</label>
+                  <input
+                    required
+                    type="text"
+                    value={formData.mosque}
+                    onChange={e => setFormData(prev => ({ ...prev, mosque: e.target.value }))}
+                    placeholder="যেমন: বাইতুল মামুর জামে মসজিদ"
+                    className="w-full px-4 py-3 rounded-2xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20 focus:border-[#5A5A40] transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-stone-600">এলাকা</label>
+                  <input
+                    required
+                    type="text"
+                    value={formData.area}
+                    onChange={e => setFormData(prev => ({ ...prev, area: e.target.value }))}
+                    placeholder="যেমন: মগবাজার, ঢাকা"
+                    className="w-full px-4 py-3 rounded-2xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20 focus:border-[#5A5A40] transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-stone-600">খাবারের ধরন</label>
+                  <select
+                    value={formData.type}
+                    onChange={e => setFormData(prev => ({ ...prev, type: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-2xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20 focus:border-[#5A5A40] transition-all bg-white"
+                  >
+                    <option value="কাচ্চি বিরিয়ানি">কাচ্চি বিরিয়ানি</option>
+                    <option value="তেহারি">তেহারি</option>
+                    <option value="গরুর মাংস">গরুর মাংস</option>
+                    <option value="খিচুড়ি">খিচুড়ি</option>
+                    <option value="অন্যান্য">অন্যান্য</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-stone-600">ছবি (ঐচ্ছিক)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.images.map((img, i) => (
+                      <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-stone-200">
+                        <img src={img} className="w-full h-full object-cover" />
+                        <button 
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, images: prev.images.filter((_, idx) => idx !== i) }))}
+                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                    <label className="w-20 h-20 rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 hover:border-[#5A5A40] hover:text-[#5A5A40] transition-all cursor-pointer">
+                      <Camera size={20} />
+                      <span className="text-[10px] mt-1">যোগ করুন</span>
+                      <input type="file" multiple accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-4 mt-6 pt-6 border-t-2 border-orange-100">
+                  <div className="flex items-start gap-3 p-5 bg-orange-50 rounded-2xl border border-orange-200">
+                    <div className="flex-shrink-0">
+                      <Utensils className="text-orange-500" size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={formData.commitment}
+                          onChange={e => setFormData(prev => ({ ...prev, commitment: e.target.checked }))}
+                          className="hidden" 
+                        />
+                        <div className={cn(
+                          "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0 mt-1",
+                          formData.commitment ? "bg-orange-500 border-orange-500" : "bg-white border-orange-300"
+                        )}>
+                          {formData.commitment && <Check size={14} className="text-white" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-bold text-stone-800 text-lg">আমি অঙ্গীকার করছি</p>
+                          <p className="text-stone-600 text-sm leading-relaxed">
+                            আমি রোজা রেখে অঙ্গীকার করছি যে উপরে যে সকল তথ্য পূরণ করেছি তা 
+                            <span className="font-bold text-orange-600"> সঠিক ও সত্য</span>। 
+                            যদি কোন তথ্য মিথ্যা প্রমাণিত হয়, তাহলে আমি এর জন্য দায়ী থাকব।
+                          </p>
+                        </div>
+                      </label>
+                      
+                      <div className="mt-3 p-3 bg-white/60 rounded-xl border border-orange-100 text-xs text-stone-500 italic">
+                        "তোমরা সত্যকে মিথ্যার সাথে মিশিয়ে দিও না এবং জেনে-শুনে সত্য গোপন করো না" 
+                        <span className="text-orange-400 block mt-1">(সূরা আল-বাকারাহ, আয়াত ৪২)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !formData.commitment}
+                    className="w-full py-5 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-orange-500/30 transition-all transform hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  >
+                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+                    পাবলিশ করুন
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
