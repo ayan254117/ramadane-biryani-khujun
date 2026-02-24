@@ -152,16 +152,33 @@ export default function App() {
 
   const fetchTimings = async (loc: { lat: number; lng: number } | null) => {
     if (!process.env.GEMINI_API_KEY) {
-      setTimings("API Key সেট করা নেই। অনুগ্রহ করে এনভায়রনমেন্ট ভেরিয়েবল চেক করুন।");
+      setTimings("API Key সেট করা নেই।");
       return;
     }
+
+    // Simple caching: If we already have timings for today, don't fetch again
+    const today = new Date().toDateString();
+    const cachedTimings = localStorage.getItem('ramadan_timings');
+    const cachedDate = localStorage.getItem('ramadan_timings_date');
+
+    if (cachedTimings && cachedDate === today && !loc) {
+      setTimings(cachedTimings);
+      return;
+    }
+
     setTimingsLoading(true);
     try {
       const data = await getRamadanTimings(loc?.lat, loc?.lng);
       setTimings(data);
+      localStorage.setItem('ramadan_timings', data);
+      localStorage.setItem('ramadan_timings_date', today);
     } catch (err: any) {
       console.error(err);
-      setTimings(`সময়সূচী লোড করতে সমস্যা হয়েছে: ${err.message || "Unknown error"}`);
+      if (err.message?.includes('429') || err.message?.includes('quota')) {
+        setTimings("এপিআই লিমিট শেষ হয়ে গেছে। কিছুক্ষণ পর আবার চেষ্টা করুন।");
+      } else {
+        setTimings(`সময়সূচী লোড করতে সমস্যা হয়েছে।`);
+      }
     } finally {
       setTimingsLoading(false);
     }
@@ -250,7 +267,15 @@ export default function App() {
         places: allSpots 
       });
     } catch (err: any) {
-      setError(`বিরিয়ানি স্পট খুঁজে পেতে ব্যর্থ হয়েছে: ${err.message}`);
+      let msg = "বিরিয়ানি স্পট খুঁজে পেতে ব্যর্থ হয়েছে।";
+      if (err.message?.includes('Invalid API key')) {
+        msg = "ডাটাবেস কানেকশন এরর: অনুগ্রহ করে Supabase API Key চেক করুন।";
+      } else if (err.message?.includes('Failed to fetch')) {
+        msg = "সার্ভারের সাথে যোগাযোগ করা সম্ভব হচ্ছে না।";
+      } else {
+        msg += ` (${err.message})`;
+      }
+      setError(msg);
       console.error(err);
     } finally {
       setLoading(false);
