@@ -55,17 +55,19 @@ export default function App() {
 
     const handleLocationError = (err: GeolocationPositionError) => {
       console.error("Geolocation error:", err);
-      setError("লোকেশন অ্যাক্সেস পাওয়া যায়নি। সাধারণ সময়সূচী দেখানো হচ্ছে।");
-      // Fetch timings even without location
+      let msg = "লোকেশন অ্যাক্সেস পাওয়া যায়নি।";
+      if (err.code === err.PERMISSION_DENIED) msg = "লোকেশন পারমিশন রিজেক্ট করা হয়েছে।";
+      if (err.code === err.TIMEOUT) msg = "লোকেশন পেতে অনেক সময় লাগছে।";
+      
+      setError(msg + " সাধারণ সময়সূচী দেখানো হচ্ছে।");
       fetchTimings(null);
     };
 
     if ("geolocation" in navigator) {
-      // Get initial position
       navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
+        enableHighAccuracy: false, // Faster for mobile
+        timeout: 10000,
+        maximumAge: 60000
       });
 
       // Watch for changes
@@ -149,13 +151,17 @@ export default function App() {
   }, [location]);
 
   const fetchTimings = async (loc: { lat: number; lng: number } | null) => {
+    if (!process.env.GEMINI_API_KEY) {
+      setTimings("API Key সেট করা নেই। অনুগ্রহ করে এনভায়রনমেন্ট ভেরিয়েবল চেক করুন।");
+      return;
+    }
     setTimingsLoading(true);
     try {
       const data = await getRamadanTimings(loc?.lat, loc?.lng);
       setTimings(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setTimings("সময়সূচী লোড করতে সমস্যা হয়েছে।");
+      setTimings(`সময়সূচী লোড করতে সমস্যা হয়েছে: ${err.message || "Unknown error"}`);
     } finally {
       setTimingsLoading(false);
     }
@@ -189,41 +195,44 @@ export default function App() {
   const handleSearch = async () => {
     setLoading(true);
     setError(null);
-    setResults(null); // Clear previous results
+    setResults(null);
     try {
-      console.log("Starting search...");
       // 1. Fetch from DB
       const res = await fetch('/api/spots');
-      if (!res.ok) throw new Error("Failed to fetch from server");
       const dbData = await res.json();
-      let allSpots: any[] = [];
+      
+      if (!res.ok) {
+        throw new Error(dbData.message || "সার্ভার থেকে ডেটা পাওয়া যায়নি");
+      }
 
+      let allSpots: any[] = [];
       if (dbData.success && dbData.spots) {
         allSpots = dbData.spots.map((spot: any) => ({
           ...spot,
           source: 'user'
         }));
       }
-      console.log(`Found ${allSpots.length} spots in DB`);
 
       // 2. Fetch from Gemini (AI Search)
-      try {
-        const aiData = await findBiryaniPlaces(location?.lat, location?.lng);
-        if (aiData && aiData.places) {
-          const aiSpots = aiData.places.map((place: any) => ({
-            mosque_name: place.title,
-            area: "AI Search Result",
-            food_type: "বিরিয়ানি",
-            lat: location?.lat || 23.8103,
-            lng: location?.lng || 90.4125,
-            uri: place.uri,
-            source: 'ai',
-            images: "[]"
-          }));
-          allSpots = [...allSpots, ...aiSpots];
+      if (process.env.GEMINI_API_KEY) {
+        try {
+          const aiData = await findBiryaniPlaces(location?.lat, location?.lng);
+          if (aiData && aiData.places) {
+            const aiSpots = aiData.places.map((place: any) => ({
+              mosque_name: place.title,
+              area: "AI Search Result",
+              food_type: "বিরিয়ানি",
+              lat: location?.lat || 23.8103,
+              lng: location?.lng || 90.4125,
+              uri: place.uri,
+              source: 'ai',
+              images: "[]"
+            }));
+            allSpots = [...allSpots, ...aiSpots];
+          }
+        } catch (aiErr: any) {
+          console.error("AI Search failed", aiErr);
         }
-      } catch (aiErr) {
-        console.error("AI Search failed", aiErr);
       }
       
       if (location) {
