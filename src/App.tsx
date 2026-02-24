@@ -45,22 +45,35 @@ export default function App() {
     fetchUserSpots();
     let watchId: number;
 
+    const handleLocationSuccess = (position: GeolocationPosition) => {
+      const newLoc = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      };
+      setLocation(newLoc);
+    };
+
+    const handleLocationError = (err: GeolocationPositionError) => {
+      console.error("Geolocation error:", err);
+      setError("লোকেশন অ্যাক্সেস পাওয়া যায়নি। সাধারণ সময়সূচী দেখানো হচ্ছে।");
+      // Fetch timings even without location
+      fetchTimings(null);
+    };
+
     if ("geolocation" in navigator) {
-      // Use watchPosition for live tracking
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const newLoc = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          };
-          setLocation(newLoc);
-        },
-        (err) => {
-          console.error("Geolocation error:", err);
-          setError("লোকেশন অ্যাক্সেস পাওয়া যায়নি। সাধারণ সার্চ ব্যবহার করা হচ্ছে।");
-        },
-        { enableHighAccuracy: true }
-      );
+      // Get initial position
+      navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      });
+
+      // Watch for changes
+      watchId = navigator.geolocation.watchPosition(handleLocationSuccess, handleLocationError, {
+        enableHighAccuracy: true
+      });
+    } else {
+      fetchTimings(null);
     }
 
     return () => {
@@ -131,17 +144,18 @@ export default function App() {
 
   useEffect(() => {
     if (location) {
-      fetchTimings();
+      fetchTimings(location);
     }
   }, [location]);
 
-  const fetchTimings = async () => {
+  const fetchTimings = async (loc: { lat: number; lng: number } | null) => {
     setTimingsLoading(true);
     try {
-      const data = await getRamadanTimings(location?.lat, location?.lng);
+      const data = await getRamadanTimings(loc?.lat, loc?.lng);
       setTimings(data);
     } catch (err) {
       console.error(err);
+      setTimings("সময়সূচী লোড করতে সমস্যা হয়েছে।");
     } finally {
       setTimingsLoading(false);
     }
@@ -159,32 +173,75 @@ export default function App() {
     return R * c; // Distance in km
   };
 
+  const getImages = (images: any) => {
+    if (!images) return [];
+    if (typeof images === 'string') {
+      try {
+        const parsed = JSON.parse(images);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return Array.isArray(images) ? images : [];
+  };
+
   const handleSearch = async () => {
     setLoading(true);
     setError(null);
+    setResults(null); // Clear previous results
     try {
-      // Fetch latest spots from DB
+      console.log("Starting search...");
+      // 1. Fetch from DB
       const res = await fetch('/api/spots');
-      const data = await res.json();
-      
-      if (data.success) {
-        let spots = data.spots as UserSpot[];
-        
-        // If location is available, calculate distance and sort
-        if (location) {
-          spots = spots.map(spot => ({
-            ...spot,
-            distance: calculateDistance(location.lat, location.lng, spot.lat, spot.lng)
-          })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
-        }
+      if (!res.ok) throw new Error("Failed to fetch from server");
+      const dbData = await res.json();
+      let allSpots: any[] = [];
 
-        setResults({ 
-          text: `আপনার আশেপাশে ${spots.length}টি বিরিয়ানি স্পট পাওয়া গেছে।`, 
-          places: spots 
-        });
+      if (dbData.success && dbData.spots) {
+        allSpots = dbData.spots.map((spot: any) => ({
+          ...spot,
+          source: 'user'
+        }));
       }
-    } catch (err) {
-      setError("বিরিয়ানি স্পট খুঁজে পেতে ব্যর্থ হয়েছে। আবার চেষ্টা করুন।");
+      console.log(`Found ${allSpots.length} spots in DB`);
+
+      // 2. Fetch from Gemini (AI Search)
+      try {
+        const aiData = await findBiryaniPlaces(location?.lat, location?.lng);
+        if (aiData && aiData.places) {
+          const aiSpots = aiData.places.map((place: any) => ({
+            mosque_name: place.title,
+            area: "AI Search Result",
+            food_type: "বিরিয়ানি",
+            lat: location?.lat || 23.8103,
+            lng: location?.lng || 90.4125,
+            uri: place.uri,
+            source: 'ai',
+            images: "[]"
+          }));
+          allSpots = [...allSpots, ...aiSpots];
+        }
+      } catch (aiErr) {
+        console.error("AI Search failed", aiErr);
+      }
+      
+      if (location) {
+        allSpots = allSpots.map(spot => ({
+          ...spot,
+          distance: calculateDistance(location.lat, location.lng, spot.lat, spot.lng)
+        })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
+      }
+
+      console.log(`Total spots to display: ${allSpots.length}`);
+      setResults({ 
+        text: allSpots.length > 0 
+          ? `আপনার আশেপাশে ${allSpots.length}টি বিরিয়ানি স্পট পাওয়া গেছে।`
+          : "দুঃখিত, কোনো বিরিয়ানি স্পট খুঁজে পাওয়া যায়নি।", 
+        places: allSpots 
+      });
+    } catch (err: any) {
+      setError(`বিরিয়ানি স্পট খুঁজে পেতে ব্যর্থ হয়েছে: ${err.message}`);
       console.error(err);
     } finally {
       setLoading(false);
@@ -235,15 +292,42 @@ export default function App() {
             </div>
 
             {timingsLoading ? (
-              <div className="flex items-center justify-center py-8">
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
                 <Loader2 className="animate-spin text-[#5A5A40]" size={32} />
+                <p className="text-xs text-stone-400 animate-pulse">আপনার এলাকার সময়সূচী খোঁজা হচ্ছে...</p>
               </div>
-            ) : timings ? (
-              <div className="markdown-body prose prose-stone max-w-none">
-                <Markdown>{timings}</Markdown>
+            ) : timings !== null ? (
+              <div className="space-y-4">
+                <div className="markdown-body prose prose-stone max-w-none bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                  <Markdown>{timings}</Markdown>
+                </div>
+                {!location && (
+                  <button 
+                    onClick={() => {
+                      if ("geolocation" in navigator) {
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                          (err) => console.error(err),
+                          { enableHighAccuracy: true }
+                        );
+                      }
+                    }}
+                    className="text-[10px] text-[#5A5A40] underline hover:no-underline"
+                  >
+                    সঠিক সময়সূচীর জন্য লোকেশন অন করুন
+                  </button>
+                )}
               </div>
             ) : (
-              <p className="text-stone-500 italic">সময়সূচী লোড হচ্ছে...</p>
+              <div className="flex flex-col items-center py-8 gap-4">
+                <p className="text-stone-500 italic">সময়সূচী লোড করা সম্ভব হয়নি।</p>
+                <button 
+                  onClick={() => fetchTimings(location)}
+                  className="text-sm bg-[#5A5A40] text-white px-4 py-2 rounded-full"
+                >
+                  আবার চেষ্টা করুন
+                </button>
+              </div>
             )}
           </div>
         </section>
@@ -296,10 +380,10 @@ export default function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   className="bg-white rounded-3xl overflow-hidden shadow-sm border border-[#5A5A40]/10 flex flex-col"
                 >
-                  {spot.images && JSON.parse(spot.images).length > 0 && (
+                  {getImages(spot.images).length > 0 && (
                     <div className="h-48 overflow-hidden">
                       <img 
-                        src={JSON.parse(spot.images)[0]} 
+                        src={getImages(spot.images)[0]} 
                         alt={spot.mosque_name}
                         className="w-full h-full object-cover"
                       />
@@ -360,10 +444,10 @@ export default function App() {
                       className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-stone-100 bg-stone-50 hover:bg-stone-100 transition-all group"
                     >
                       {/* Photo if available */}
-                      {spot.images && JSON.parse(spot.images).length > 0 ? (
+                      {getImages(spot.images).length > 0 ? (
                         <div className="w-full md:w-32 h-32 rounded-xl overflow-hidden flex-shrink-0">
                           <img 
-                            src={JSON.parse(spot.images)[0]} 
+                            src={getImages(spot.images)[0]} 
                             alt={spot.mosque_name}
                             className="w-full h-full object-cover"
                           />
@@ -394,9 +478,12 @@ export default function App() {
                                 {spot.distance.toFixed(2)} কিমি দূরে
                               </p>
                             )}
+                            {spot.source === 'ai' && (
+                              <p className="text-[10px] text-stone-400 mt-1 italic">AI দ্বারা খুঁজে পাওয়া</p>
+                            )}
                           </div>
                           <a 
-                            href={`https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
+                            href={spot.uri || `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="bg-[#5A5A40] text-white p-2 rounded-xl hover:scale-110 transition-transform"
