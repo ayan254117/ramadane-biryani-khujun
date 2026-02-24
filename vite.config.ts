@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/react-refresh' // অথবা আপনার আগের ইম্পোর্টটি ঠিক রাখুন
+import react from '@vitejs/plugin-react'
 
+// https://vitejs.dev/config/
 export default defineConfig({
+  plugins: [react()],
   server: {
-    allowedHosts: ['ramadane-biryani-khujun.onrender.com']
+    allowedHosts: true
   }
 })
