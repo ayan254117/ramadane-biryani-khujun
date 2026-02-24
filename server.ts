@@ -4,9 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 import path from "path";
 
 // Supabase configuration
-const supabaseUrl = process.env.SUPABASE_URL || "";
-const supabaseKey = process.env.SUPABASE_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 async function startServer() {
   const app = express();
@@ -16,7 +16,7 @@ async function startServer() {
 
   // Auto-cleanup logic: Delete spots every day at 7:00 PM
   const cleanupOldSpots = async () => {
-    if (!supabaseUrl || !supabaseKey) return;
+    if (!supabase) return;
 
     const now = new Date();
     const hours = now.getHours();
@@ -55,6 +55,9 @@ async function startServer() {
   });
 
   app.get("/api/spots", async (req, res) => {
+    if (!supabase) {
+      return res.status(503).json({ success: false, message: "Database not configured" });
+    }
     try {
       const { data, error } = await supabase
         .from('spots')
@@ -69,6 +72,9 @@ async function startServer() {
   });
 
   app.post("/api/spots", async (req, res) => {
+    if (!supabase) {
+      return res.status(503).json({ success: false, message: "Database not configured" });
+    }
     const { mosque, area, type, lat, lng, images } = req.body;
 
     if (!mosque || !area || !type || !lat || !lng) {
