@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, MapPin, Moon, Sun, Utensils, Loader2, ExternalLink, ChevronRight, Plus, X, Camera, CheckCircle2, Check } from 'lucide-react';
+import { Search, MapPin, Moon, Sun, Utensils, Loader2, ExternalLink, ChevronRight, Plus, X, Camera, CheckCircle2, Check, Github } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
 import { findBiryaniPlaces, getRamadanTimings } from './services/geminiService';
@@ -430,13 +430,13 @@ export default function App() {
                 }}
               />
             </div>
-            <div>
-              <p className="text-stone-400 text-[10px] uppercase tracking-widest mb-1">Developed By</p>
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-stone-400 text-[10px] uppercase tracking-widest">Developed By</p>
               <a 
                 href="https://www.facebook.com/abdullatifayan321" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="font-bold text-stone-800 hover:text-[#5A5A40] transition-colors flex items-center gap-2 justify-center text-lg"
+                className="font-bold text-stone-800 hover:text-[#5A5A40] transition-colors flex items-center gap-2 text-lg"
               >
                 Abdul Latif Ayan
                 <ExternalLink size={16} />
