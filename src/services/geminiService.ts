@@ -1,7 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
 export interface Restaurant {
   name: string;
   address: string;
@@ -10,7 +8,13 @@ export interface Restaurant {
   description?: string;
 }
 
+const getAI = () => {
+  const apiKey = process.env.GEMINI_API_KEY || "";
+  return new GoogleGenAI({ apiKey });
+};
+
 export async function findBiryaniPlaces(lat?: number, lng?: number): Promise<{ text: string; places: any[] }> {
+  const ai = getAI();
   const locationPrompt = lat && lng ? ` near coordinates ${lat}, ${lng}` : " in my area";
   
   const response = await ai.models.generateContent({
@@ -40,6 +44,7 @@ export async function findBiryaniPlaces(lat?: number, lng?: number): Promise<{ t
 }
 
 export async function getRamadanTimings(lat?: number, lng?: number): Promise<string> {
+  const ai = getAI();
   const locationPrompt = lat && lng ? ` for coordinates ${lat}, ${lng}` : " for my current location";
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
