@@ -8,7 +8,7 @@ import { Search, MapPin, Moon, Utensils, Loader2, ExternalLink, Plus, X, Camera,
 import { motion, AnimatePresence } from 'motion/react';
 import { findBiryaniPlaces } from './services/geminiService';
 import { cn } from './lib/utils';
-import profilePic from '../assets/ayan.jpg';
+import profilePic from '../assets/Abdul Latif-Ayan.jpg';
 
 // ==========================================
 // ১. খাবারের নাম ক্লিন করার ফাংশন
