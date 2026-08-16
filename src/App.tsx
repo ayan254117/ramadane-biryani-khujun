@@ -11,7 +11,20 @@ import { cn } from './lib/utils';
 import profilePic from './assets/ayan.jpg';
 
 // ==========================================
-// ১. রমজান সময়সূচী ও লাইভ ক্লক কম্পোনেন্ট
+// ১. হেলপার ফাংশন (খাবারের নাম ক্লিন করার জন্য)
+// ==========================================
+const cleanFoodType = (typeStr: string | undefined | null) => {
+  if (!typeStr) return 'বিরিয়ানি';
+  // হাইফেন বা ড্যাশ থাকলে একদম শেষের খাবারের ধরণটি পৃথক করবে
+  if (typeStr.includes('-')) {
+    const parts = typeStr.split('-');
+    return parts[parts.length - 1].trim();
+  }
+  return typeStr.trim();
+};
+
+// ==========================================
+// ২. রমজান সময়সূচী ও লাইভ ক্লক কম্পোনেন্ট
 // ==========================================
 function RamadaneSchedule() {
   const [hijriDate, setHijriDate] = useState<string>('');
@@ -70,7 +83,6 @@ function RamadaneSchedule() {
         const targetLat = lat || 23.8103;
         const targetLng = lng || 90.4125;
 
-        // রিভার্স জিওকোডিং এরিয়া নেম পাওয়ার জন্য
         if (lat && lng) {
           try {
             const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
@@ -196,7 +208,7 @@ function RamadaneSchedule() {
 }
 
 // ==========================================
-// ২. মূল App কম্পোনেন্ট
+// ৩. মূল App কম্পোনেন্ট
 // ==========================================
 interface UserSpot {
   id: number;
@@ -370,7 +382,8 @@ export default function App() {
         }));
       }
 
-      if (process.env.GEMINI_API_KEY) {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (apiKey) {
         try {
           const aiData = await findBiryaniPlaces(location?.lat, location?.lng);
           if (aiData && aiData.places) {
@@ -512,7 +525,7 @@ export default function App() {
                       <div className="flex justify-between items-start mb-2">
                         <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
                         <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-2 py-1 rounded-full font-bold">
-                          {spot.food_type}
+                          {cleanFoodType(spot.food_type)}
                         </span>
                       </div>
                       <p className="text-stone-500 flex items-center gap-1 text-sm mb-4">
@@ -584,7 +597,7 @@ export default function App() {
                             <div className="flex justify-between items-start">
                               <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
                               <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold">
-                                {spot.food_type}
+                                {cleanFoodType(spot.food_type)}
                               </span>
                             </div>
                             <p className="text-stone-500 flex items-center gap-1 text-sm mt-1">
