@@ -5,9 +5,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Search, MapPin, Moon, Utensils, Loader2, ExternalLink, Plus, X, 
-  Camera, CheckCircle2, Check, Clock, Calendar, Heart, Star, 
-  Share2, Bookmark, MessageSquare, Home, Compass, BookmarkCheck, User, Sparkles
+  Search, MapPin, Utensils, Loader2, ExternalLink, Plus, X, 
+  Clock, Heart, Share2, Bookmark, MessageSquare, Home, Compass, 
+  BookmarkCheck, User, Facebook, Code, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { findBiryaniPlaces } from './services/geminiService';
@@ -33,7 +33,6 @@ const formatDistance = (km: number) => {
   return `${km.toFixed(1)} কিমি দূরে`;
 };
 
-// কমেন্টের জন্য শর্টকাট অপশনসমূহ
 const COMMENT_SHORTCUTS = [
   "খাবার খুব সুস্বাদু ছিল! 😋",
   "অসাধারণ আয়োজন, আলহামদুলিল্লাহ ❤️",
@@ -44,29 +43,26 @@ const COMMENT_SHORTCUTS = [
 ];
 
 // ==========================================
-// ২. ইফতার কাউন্টডাউন ও সময়সূচী
+// ২. আল্ট্রা-মডার্ন ডিজিটাল ইফতার কাউন্টডাউন
 // ==========================================
 function RamadaneSchedule() {
   const [locationName, setLocationName] = useState<string>('ঢাকা, বাংলাদেশ');
   const [loading, setLoading] = useState<boolean>(true);
   const [schedule, setSchedule] = useState<{ sehri: string; iftar: string; iftarTimeObj?: Date } | null>(null);
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [timeLeft, setTimeLeft] = useState<{ hrs: number; mins: number; secs: number; isOver: boolean }>({ hrs: 0, mins: 0, secs: 0, isOver: false });
 
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      setCurrentTime(now);
-
       if (schedule?.iftarTimeObj) {
         const diff = schedule.iftarTimeObj.getTime() - now.getTime();
         if (diff > 0) {
           const hrs = Math.floor(diff / (1000 * 60 * 60));
           const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
           const secs = Math.floor((diff % (1000 * 60)) / 1000);
-          setTimeLeft(`${hrs > 0 ? hrs + 'ঘণ্টা ' : ''}${mins}মি. ${secs}সে. বাকি`);
+          setTimeLeft({ hrs, mins, secs, isOver: false });
         } else {
-          setTimeLeft('ইফতারের সময় হয়েছে!');
+          setTimeLeft({ hrs: 0, mins: 0, secs: 0, isOver: true });
         }
       }
     }, 1000);
@@ -96,7 +92,6 @@ function RamadaneSchedule() {
 
         if (data.code === 200) {
           const timings = data.data.timings;
-          
           const [iftarHour, iftarMinute] = timings.Maghrib.split(':');
           const iftarDate = new Date();
           iftarDate.setHours(parseInt(iftarHour, 10), parseInt(iftarMinute, 10), 0);
@@ -133,10 +128,14 @@ function RamadaneSchedule() {
   }, []);
 
   return (
-    <div className="bg-gradient-to-br from-[#5A5A40] to-[#383827] text-white rounded-[2rem] p-5 shadow-xl relative overflow-hidden border border-white/10">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] bg-white/15 px-3 py-1 rounded-full backdrop-blur-md flex items-center gap-1 font-medium">
-          <MapPin size={12} /> {locationName}
+    <div className="bg-gradient-to-br from-stone-900 via-stone-800 to-black text-white rounded-[2rem] p-5 shadow-2xl relative overflow-hidden border border-amber-500/20">
+      {/* Background Decorative Elements */}
+      <div className="absolute -right-10 -top-10 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+      <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+      <div className="flex items-center justify-between mb-4 relative z-10">
+        <span className="text-[11px] bg-white/10 px-3 py-1 rounded-full backdrop-blur-md flex items-center gap-1.5 font-medium border border-white/10 text-stone-200">
+          <MapPin size={12} className="text-amber-400" /> {locationName}
         </span>
         <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-semibold">
           অটো-ডিলিট: রাত ১১:৫৯
@@ -144,29 +143,55 @@ function RamadaneSchedule() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-6 gap-2">
-          <Loader2 className="animate-spin text-white/70" size={20} />
-          <p className="text-xs text-white/70">সময়সূচী লোড হচ্ছে...</p>
+        <div className="flex items-center justify-center py-8 gap-2">
+          <Loader2 className="animate-spin text-amber-400" size={22} />
+          <p className="text-xs text-stone-300">ডিজিটাল সময়সূচী লোড হচ্ছে...</p>
         </div>
       ) : schedule ? (
-        <div className="space-y-3">
+        <div className="space-y-4 relative z-10">
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 text-center">
-              <p className="text-[10px] text-white/70 font-medium">সেহরির শেষ সময়</p>
-              <p className="text-xl font-black mt-0.5" style={{ fontFamily: 'sans-serif' }}>{schedule.sehri}</p>
+            <div className="bg-white/5 backdrop-blur-md p-3 rounded-2xl border border-white/10 text-center">
+              <p className="text-[10px] text-stone-400 font-medium">সেহরির শেষ সময়</p>
+              <p className="text-lg font-black text-stone-200 mt-0.5">{schedule.sehri}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-md p-3 rounded-2xl border border-white/20 text-center">
-              <p className="text-[10px] text-amber-200 font-bold">ইফতারের সময়</p>
-              <p className="text-xl font-black text-amber-300 mt-0.5" style={{ fontFamily: 'sans-serif' }}>{schedule.iftar}</p>
+            <div className="bg-amber-500/10 backdrop-blur-md p-3 rounded-2xl border border-amber-500/20 text-center">
+              <p className="text-[10px] text-amber-300 font-bold">ইফতারের সময়</p>
+              <p className="text-lg font-black text-amber-400 mt-0.5">{schedule.iftar}</p>
             </div>
           </div>
 
-          {timeLeft && (
-            <div className="bg-amber-400/20 border border-amber-300/30 rounded-2xl p-2.5 text-center backdrop-blur-sm flex items-center justify-center gap-2">
-              <Clock size={16} className="text-amber-300" />
-              <p className="text-xs font-bold text-white">{timeLeft}</p>
-            </div>
-          )}
+          {/* Modern Digital Clock Display */}
+          <div className="bg-stone-950/80 border border-stone-800 rounded-2xl p-3.5 text-center shadow-inner">
+            <p className="text-[10px] uppercase tracking-widest text-amber-400/80 font-bold mb-2 flex items-center justify-center gap-1">
+              <Clock size={12} /> ইফতারের বাকি সময় (ডিজিটাল কাউন্টডাউন)
+            </p>
+            {timeLeft.isOver ? (
+              <p className="text-sm font-bold text-emerald-400 animate-pulse">আজকের ইফতারের সময় সম্পন্ন হয়েছে!</p>
+            ) : (
+              <div className="flex justify-center items-center gap-2">
+                <div className="flex flex-col items-center">
+                  <div className="bg-stone-900 border border-amber-500/30 text-amber-300 text-xl font-black px-3 py-1.5 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                    {String(timeLeft.hrs).padStart(2, '0')}
+                  </div>
+                  <span className="text-[9px] text-stone-400 mt-1">ঘণ্টা</span>
+                </div>
+                <span className="text-amber-400 text-lg font-bold -mt-4">:</span>
+                <div className="flex flex-col items-center">
+                  <div className="bg-stone-900 border border-amber-500/30 text-amber-300 text-xl font-black px-3 py-1.5 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                    {String(timeLeft.mins).padStart(2, '0')}
+                  </div>
+                  <span className="text-[9px] text-stone-400 mt-1">মিনিট</span>
+                </div>
+                <span className="text-amber-400 text-lg font-bold -mt-4">:</span>
+                <div className="flex flex-col items-center">
+                  <div className="bg-stone-900 border border-amber-500/30 text-amber-300 text-xl font-black px-3 py-1.5 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                    {String(timeLeft.secs).padStart(2, '0')}
+                  </div>
+                  <span className="text-[9px] text-stone-400 mt-1">সেকেন্ড</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
     </div>
@@ -174,7 +199,7 @@ function RamadaneSchedule() {
 }
 
 // ==========================================
-// ৩. মূল App কম্পোনেন্ট (Mobile App UI/UX)
+// ৩. মূল App কম্পোনেন্ট
 // ==========================================
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'saved'>('home');
@@ -182,14 +207,11 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [results, setResults] = useState<{ text: string; places: any[] } | null>(null);
   const [userSpots, setUserSpots] = useState<any[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
 
-  // Local State
   const [savedSpots, setSavedSpots] = useState<number[]>([]);
   const [reactions, setReactions] = useState<Record<number, { likes: number; liked: boolean }>>({});
   
-  // Comment System with Name & Shortcuts
   const [selectedSpotForComment, setSelectedSpotForComment] = useState<any | null>(null);
   const [userNameInput, setUserNameInput] = useState<string>('');
   const [commentInput, setCommentInput] = useState<string>('');
@@ -240,7 +262,6 @@ export default function App() {
   const handleSearch = async () => {
     setActiveTab('search');
     setLoading(true);
-    setError(null);
 
     let currentLat = location?.lat;
     let currentLng = location?.lng;
@@ -298,7 +319,7 @@ export default function App() {
         places: allSpots
       });
     } catch (err: any) {
-      setError("স্পট লোড করতে সমস্যা হয়েছে।");
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -323,7 +344,6 @@ export default function App() {
     });
   };
 
-  // কমেন্ট ও শর্টকাট সাবমিট লজিক
   const handleAddComment = (spotId: number) => {
     const finalComment = shortcutSelect || commentInput.trim();
     if (!userNameInput.trim()) {
@@ -376,8 +396,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 pb-24 font-sans select-none antialiased">
-      {/* Mobile App Glass Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-stone-200/80 px-4 py-3 flex items-center justify-between shadow-sm">
+      {/* App Header */}
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-stone-200 px-4 py-3 flex items-center justify-between shadow-sm max-w-md mx-auto">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 bg-[#5A5A40] text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-md shadow-[#5A5A40]/20">
             র
@@ -396,16 +416,15 @@ export default function App() {
         </button>
       </header>
 
-      {/* Main Mobile App Container */}
+      {/* Main Container */}
       <main className="max-w-md mx-auto p-4 space-y-4">
         
-        {/* Schedule Widget */}
+        {/* Countdown Schedule */}
         <RamadaneSchedule />
 
         {/* Tab 1: Home Feed */}
         {activeTab === 'home' && (
           <div className="space-y-4">
-            {/* Quick Search Card */}
             <div 
               onClick={handleSearch}
               className="bg-white p-3.5 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-between cursor-pointer active:bg-stone-50 transition-all"
@@ -419,7 +438,6 @@ export default function App() {
               </span>
             </div>
 
-            {/* Spots Feed */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold text-stone-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -429,7 +447,7 @@ export default function App() {
               </div>
 
               {userSpots.length === 0 ? (
-                <div className="bg-white p-8 rounded-2xl text-center border border-stone-200/80 space-y-3">
+                <div className="bg-white p-8 rounded-2xl text-center border border-stone-200 space-y-3">
                   <Compass className="mx-auto text-stone-300 animate-bounce" size={36} />
                   <p className="text-xs text-stone-500 font-medium">আজকে এখনো কোনো স্পট যুক্ত করা হয়নি।</p>
                   <button onClick={() => setShowAddModal(true)} className="text-xs text-[#5A5A40] font-bold underline">
@@ -448,7 +466,7 @@ export default function App() {
                       key={spot.id} 
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="bg-white rounded-3xl border border-stone-200/80 shadow-sm overflow-hidden"
+                      className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden"
                     >
                       {imgs.length > 0 && (
                         <div className="h-44 bg-stone-100 relative">
@@ -475,7 +493,6 @@ export default function App() {
                           </span>
                         </div>
 
-                        {/* Interactive App Bar */}
                         <div className="pt-2 border-t border-stone-100 flex items-center justify-between text-stone-600">
                           <div className="flex items-center gap-4">
                             <button 
@@ -536,7 +553,7 @@ export default function App() {
               <div className="space-y-3">
                 <p className="text-xs font-bold text-stone-500">{results.text}</p>
                 {results.places.map((spot, idx) => (
-                  <div key={idx} className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-sm flex items-center justify-between">
+                  <div key={idx} className="bg-white p-3.5 rounded-2xl border border-stone-200 shadow-sm flex items-center justify-between">
                     <div>
                       <h4 className="font-bold text-sm text-stone-800">{spot.mosque_name}</h4>
                       <p className="text-xs text-stone-500 mt-0.5">{spot.area}</p>
@@ -561,7 +578,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 3: Saved Spots */}
+        {/* Tab 3: Saved */}
         {activeTab === 'saved' && (
           <div className="space-y-3">
             <h2 className="text-xs font-bold text-stone-600 uppercase tracking-wider flex items-center gap-1.5">
@@ -586,18 +603,55 @@ export default function App() {
             )}
           </div>
         )}
+
+        {/* HIGHLIGHTED DEVELOPER FOOTER CARD */}
+        <section className="pt-6">
+          <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white rounded-3xl p-5 shadow-xl border border-amber-500/30 relative overflow-hidden">
+            <div className="flex items-center gap-4">
+              {/* Profile Image with Glow Border */}
+              <div className="relative">
+                <img 
+                  src={profilePic} 
+                  alt="Abdul Latif Ayan" 
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-400/80 shadow-md" 
+                />
+                <span className="absolute -bottom-1 -right-1 bg-amber-500 text-black p-1 rounded-full text-[9px] font-black">
+                  <Code size={10} />
+                </span>
+              </div>
+
+              {/* Developer Info */}
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-amber-400" />
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Lead Developer</span>
+                </div>
+                <h3 className="font-extrabold text-base text-white leading-snug">Abdul Latif Ayan</h3>
+                <p className="text-[11px] text-stone-300">Full Stack Software Developer</p>
+                
+                {/* Facebook Button */}
+                <a 
+                  href="https://www.facebook.com/abdullatifayan321" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 mt-2 bg-blue-600/90 hover:bg-blue-600 text-white px-3 py-1 rounded-xl text-[11px] font-bold transition-all shadow-sm active:scale-95 border border-blue-400/30"
+                >
+                  <Facebook size={12} />
+                  <span>Facebook Profile</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center text-[10px] text-stone-400 font-medium">
+              <span>© 2026 Ramadan Biryani Khujun</span>
+              <span>Dhaka, Bangladesh</span>
+            </div>
+          </div>
+        </section>
+
       </main>
 
-      {/* Footer */}
-      <footer className="py-6 text-center text-stone-400 text-[11px] space-y-2 border-t border-stone-200/60 bg-white">
-        <div className="flex items-center justify-center gap-2">
-          <img src={profilePic} alt="Ayan" className="w-6 h-6 rounded-full object-cover border" />
-          <span className="font-medium text-stone-600">Abdul Latif Ayan</span>
-        </div>
-        <p>© 2026 Ramadan Biryani Khujun • Dhaka</p>
-      </footer>
-
-      {/* Mobile App Bottom Navigation Bar */}
+      {/* Bottom Nav Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-lg border-t border-stone-200 px-6 py-2 flex justify-around items-center max-w-md mx-auto shadow-lg">
         <button 
           onClick={() => setActiveTab('home')}
@@ -619,7 +673,7 @@ export default function App() {
         </button>
       </nav>
 
-      {/* Comment & Review Modal with Shortcuts and Name */}
+      {/* Comment Modal */}
       <AnimatePresence>
         {selectedSpotForComment && (
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center">
@@ -637,7 +691,6 @@ export default function App() {
                 <button onClick={() => setSelectedSpotForComment(null)} className="p-1 hover:bg-stone-100 rounded-full"><X size={20} /></button>
               </div>
 
-              {/* Comment Feed */}
               <div className="flex-1 overflow-y-auto space-y-2 py-2">
                 {(spotComments[selectedSpotForComment.id] || []).length === 0 ? (
                   <p className="text-xs text-stone-400 text-center py-6">এখনো কোনো কমেন্ট করা হয়নি। প্রথম কমেন্টটি আপনি দিন!</p>
@@ -656,37 +709,29 @@ export default function App() {
                 )}
               </div>
 
-              {/* Input Form with Name & Shortcut Dropdown */}
               <div className="space-y-2.5 pt-2 border-t">
-                {/* User Name Input */}
-                <div className="relative">
-                  <input 
-                    type="text"
-                    value={userNameInput}
-                    onChange={e => setUserNameInput(e.target.value)}
-                    placeholder="আপনার নাম লিখুন..."
-                    className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-[#5A5A40]/20"
-                  />
-                </div>
+                <input 
+                  type="text"
+                  value={userNameInput}
+                  onChange={e => setUserNameInput(e.target.value)}
+                  placeholder="আপনার নাম লিখুন..."
+                  className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none"
+                />
 
-                {/* Shortcuts Dropdown */}
-                <div className="relative">
-                  <select 
-                    value={shortcutSelect}
-                    onChange={e => {
-                      setShortcutSelect(e.target.value);
-                      if (e.target.value) setCommentInput('');
-                    }}
-                    className="w-full text-xs px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-700 outline-none"
-                  >
-                    <option value="">-- দ্রুত শর্টকাট অপশন বেছে নিন --</option>
-                    {COMMENT_SHORTCUTS.map((sc, i) => (
-                      <option key={i} value={sc}>{sc}</option>
-                    ))}
-                  </select>
-                </div>
+                <select 
+                  value={shortcutSelect}
+                  onChange={e => {
+                    setShortcutSelect(e.target.value);
+                    if (e.target.value) setCommentInput('');
+                  }}
+                  className="w-full text-xs px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-700 outline-none"
+                >
+                  <option value="">-- দ্রুত শর্টকাট অপশন বেছে নিন --</option>
+                  {COMMENT_SHORTCUTS.map((sc, i) => (
+                    <option key={i} value={sc}>{sc}</option>
+                  ))}
+                </select>
 
-                {/* Custom Text Input or Shortcut Preview */}
                 <div className="flex gap-2">
                   <input 
                     type="text"
@@ -712,12 +757,12 @@ export default function App() {
       {/* Add Spot Modal */}
       <AnimatePresence>
         {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-white rounded-t-[2rem] md:rounded-[2rem] w-full max-w-md p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+              className="bg-white rounded-t-[2rem] w-full max-w-md p-5 space-y-4 max-h-[85vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center border-b pb-3">
                 <h3 className="font-bold text-base text-[#5A5A40]">নতুন ইফতার স্পট যোগ করুন</h3>
