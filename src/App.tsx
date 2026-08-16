@@ -8,15 +8,60 @@ import { Search, MapPin, Moon, Utensils, Loader2, ExternalLink, Plus, X, Camera,
 import { motion, AnimatePresence } from 'motion/react';
 import { findBiryaniPlaces } from './services/geminiService';
 import { cn } from './lib/utils';
+import profilePic from './assets/ayan.jpg';
 
 // ==========================================
-// ১. রমজান সময়সূচী কম্পোনেন্ট
+// ১. রমজান সময়সূচী ও লাইভ ক্লক কম্পোনেন্ট
 // ==========================================
 function RamadaneSchedule() {
   const [hijriDate, setHijriDate] = useState<string>('');
-  const [locationName, setLocationName] = useState<string>('ঢাকা');
+  const [locationName, setLocationName] = useState<string>('ঢাকা, বাংলাদেশ');
   const [loading, setLoading] = useState<boolean>(true);
   const [schedule, setSchedule] = useState<{ sehri: string; iftar: string } | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  // ইংরেজি সংখ্যাকে বাংলায় রূপান্তর
+  const toBanglaDigits = (str: string | number) => {
+    const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return str.toString().replace(/\d/g, (x) => banglaDigits[parseInt(x, 10)]);
+  };
+
+  // হিজরি মাসের বাংলা নাম
+  const hijriMonthsBn: { [key: string]: string } = {
+    'Muḥarram': 'মহররম',
+    'Ṣafar': 'সফর',
+    'Rabīʿ al-awwal': 'রবিউল আউয়াল',
+    'Rabīʿ al-thānī': 'রবিউস সানি',
+    'Jumādá al-ūlá': 'জুমাদাল উলা',
+    'Jumādá al-ākhirah': 'জুমাদাস সানি',
+    'Rajab': 'রজব',
+    'Shaʿbān': 'শাবান',
+    'Ramaḍān': 'রমজান',
+    'Shawwāl': 'শাওয়াল',
+    'Dhū al-Qaʿdah': 'জিলকদ',
+    'Dhū al-Ḥijjah': 'জিলহজ্জ'
+  };
+
+  // লাইভ ঘড়ি
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 24hr সময়কে 12hr AM/PM ফরমেটে নেওয়া
+  const format12Hour = (time24: string) => {
+    if (!time24) return '';
+    const [hoursStr, minutesStr] = time24.split(':');
+    let hours = parseInt(hoursStr, 10);
+    const minutes = minutesStr.split(' ')[0];
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const hoursFormatted = hours < 10 ? `0${hours}` : hours;
+    return `${hoursFormatted}:${minutes} ${ampm}`;
+  };
 
   useEffect(() => {
     const fetchScheduleData = async (lat?: number, lng?: number) => {
@@ -24,6 +69,18 @@ function RamadaneSchedule() {
         setLoading(true);
         const targetLat = lat || 23.8103;
         const targetLng = lng || 90.4125;
+
+        // রিভার্স জিওকোডিং এরিয়া নেম পাওয়ার জন্য
+        if (lat && lng) {
+          try {
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+            const geoData = await geoRes.json();
+            const area = geoData.address.city || geoData.address.town || geoData.address.suburb || geoData.address.state || 'ঢাকা';
+            setLocationName(`${area}, বাংলাদেশ`);
+          } catch (e) {
+            setLocationName('ঢাকা, বাংলাদেশ');
+          }
+        }
 
         const res = await fetch(`https://api.aladhan.com/v1/timings?latitude=${targetLat}&longitude=${targetLng}&method=1`);
         const data = await res.json();
@@ -33,11 +90,12 @@ function RamadaneSchedule() {
           const dateInfo = data.data.date.hijri;
 
           setSchedule({
-            sehri: timings.Fajr,
-            iftar: timings.Maghrib
+            sehri: format12Hour(timings.Fajr),
+            iftar: format12Hour(timings.Maghrib)
           });
 
-          setHijriDate(`${dateInfo.day} ${dateInfo.month.en} ${dateInfo.year} AH`);
+          const monthName = hijriMonthsBn[dateInfo.month.en] || dateInfo.month.en;
+          setHijriDate(`${toBanglaDigits(dateInfo.day)} ${monthName} ${toBanglaDigits(dateInfo.year)} হিজরী`);
         }
       } catch (err) {
         console.error("Failed to fetch timings", err);
@@ -49,7 +107,6 @@ function RamadaneSchedule() {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setLocationName("আপনার এলাকা");
           fetchScheduleData(pos.coords.latitude, pos.coords.longitude);
         },
         () => fetchScheduleData()
@@ -58,6 +115,18 @@ function RamadaneSchedule() {
       fetchScheduleData();
     }
   }, []);
+
+  // তারিখ ও লাইভ টাইম ফরম্যাটিং
+  const hours = currentTime.getHours();
+  const minutes = currentTime.getMinutes();
+  const seconds = currentTime.getSeconds();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
+  const timeString = `${formattedHours < 10 ? '0' : ''}${formattedHours}:${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds} ${ampm}`;
+
+  const monthName = currentTime.toLocaleString('en-US', { month: 'long' });
+  const dateString = `${currentTime.getDate()} ${monthName} ${currentTime.getFullYear()}`;
+  const dayName = currentTime.toLocaleString('en-US', { weekday: 'long' }).toLowerCase();
 
   return (
     <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#5A5A40]/10">
@@ -77,28 +146,47 @@ function RamadaneSchedule() {
           <p className="text-xs text-stone-400 animate-pulse">সময়সূচী লোড হচ্ছে...</p>
         </div>
       ) : schedule ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-stone-500 font-medium">সেহরির শেষ সময়</p>
-              <p className="text-2xl font-serif font-bold text-[#5A5A40]">{schedule.sehri}</p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-stone-500 font-medium">সেহরির শেষ সময়</p>
+                <p className="text-2xl font-bold text-[#5A5A40]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                  {schedule.sehri}
+                </p>
+              </div>
+              <Clock className="text-[#5A5A40]/40" size={28} />
             </div>
-            <Clock className="text-[#5A5A40]/40" size={28} />
-          </div>
 
-          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-stone-500 font-medium">ইফতারের সময়</p>
-              <p className="text-2xl font-serif font-bold text-[#5A5A40]">{schedule.iftar}</p>
+            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-stone-500 font-medium">ইফতারের সময়</p>
+                <p className="text-2xl font-bold text-[#5A5A40]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                  {schedule.iftar}
+                </p>
+              </div>
+              <Utensils className="text-[#5A5A40]/40" size={28} />
             </div>
-            <Utensils className="text-[#5A5A40]/40" size={28} />
           </div>
 
           {hijriDate && (
-            <div className="md:col-span-2 text-center pt-2 text-xs text-stone-500 flex items-center justify-center gap-1">
-              <Calendar size={14} /> হিজরি তারিখ: <span className="font-semibold">{hijriDate}</span>
+            <div className="text-center pt-2 text-sm text-stone-600 flex items-center justify-center gap-1 font-medium">
+              <Calendar size={16} /> হিজরি তারিখ: <span className="font-bold text-[#5A5A40]">{hijriDate}</span>
             </div>
           )}
+
+          {/* লাইভ টাইম ওয়াচ সেকশন */}
+          <div className="mt-4 pt-4 border-t border-stone-100 text-center bg-stone-50 rounded-2xl p-3">
+            <p className="text-xl font-bold text-[#5A5A40]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+              {timeString}
+            </p>
+            <p className="text-xs text-stone-500 font-medium mt-1">
+              date: {dateString}
+            </p>
+            <p className="text-xs text-stone-500 font-medium">
+              day: {dayName}
+            </p>
+          </div>
         </div>
       ) : (
         <p className="text-center py-4 text-stone-500 text-sm">সময়সূচী পাওয়া যায়নি</p>
@@ -542,9 +630,12 @@ export default function App() {
           <div className="flex flex-col items-center gap-3">
             <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#5A5A40] shadow-lg bg-white">
               <img 
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Ayan" 
+                src={profilePic} 
                 alt="Abdul Latif Ayan"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/avataaars/svg?seed=Ayan";
+                }}
               />
             </div>
             <div className="flex flex-col items-center gap-2">
