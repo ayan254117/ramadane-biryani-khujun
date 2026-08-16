@@ -11,7 +11,7 @@ import { cn } from './lib/utils';
 import profilePic from './assets/ayan.jpg';
 
 // ==========================================
-// ১. হেলপার ফাংশন (খাবারের নাম ক্লিন করার জন্য)
+// ১. খাবারের নাম ক্লিন করার ফাংশন
 // ==========================================
 const cleanFoodType = (typeStr?: string | null): string => {
   if (!typeStr) return 'বিরিয়ানি';
@@ -23,7 +23,7 @@ const cleanFoodType = (typeStr?: string | null): string => {
 };
 
 // ==========================================
-// ২. রমজান সময়সূচী ও লাইভ ক্লক কম্পোনেন্ট
+// ২. রমজান সময়সূচী ও লাইভ ক্লক
 // ==========================================
 function RamadaneSchedule() {
   const [hijriDate, setHijriDate] = useState<string>('');
@@ -374,7 +374,6 @@ export default function App() {
         }));
       }
 
-      // Safe Environment Access for Vite TypeScript
       const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
       if (apiKey) {
         try {
