@@ -7,26 +7,31 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, MapPin, Utensils, Loader2, ExternalLink, Plus, X, 
   Clock, Heart, Share2, Bookmark, MessageSquare, Home, Compass, 
-  BookmarkCheck, User, Facebook, Code, Sparkles, Quote
+  BookmarkCheck, User, Facebook, Code, Sparkles, ImagePlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { findBiryaniPlaces } from './services/geminiService';
 import { cn } from './lib/utils';
 import profilePic from '../assets/Abdul Latif-Ayan.jpg';
+import biryaniLogo from '/assets/Biryani-Khujun-logo.png';
 
 // ==========================================
-// ১. ব্রান্ড লোগো কম্পোনেন্ট (ক্লিক করলে হোম পেজে নিয়ে যাবে)
+// ১. লোগো কম্পোনেন্ট (নির্ধারিত লোগো ফাইল সহ)
 // ==========================================
 const AppLogo = ({ onClick }: { onClick?: () => void }) => (
   <div 
     onClick={onClick}
-    className="flex items-center gap-2 cursor-pointer group select-none active:scale-95 transition-transform"
+    className="flex items-center gap-2.5 cursor-pointer group select-none active:scale-95 transition-transform"
   >
-    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#5A5A40] to-amber-600 p-0.5 shadow-md shadow-amber-900/10">
-      <div className="w-full h-full bg-stone-900 rounded-[14px] flex items-center justify-center border border-amber-400/30">
-        <span className="text-amber-400 font-extrabold text-lg tracking-tighter">BK</span>
-      </div>
-    </div>
+    <img 
+      src={biryaniLogo} 
+      alt="Biryani Khujun Logo" 
+      className="w-10 h-10 rounded-2xl object-cover shadow-sm border border-amber-500/20"
+      onError={(e) => {
+        // Fallback for dev environments if path isn't reached immediately
+        (e.target as HTMLElement).style.display = 'none';
+      }}
+    />
     <div>
       <h1 className="font-extrabold text-base text-stone-900 leading-tight tracking-tight group-hover:text-[#5A5A40] transition-colors">
         Biryani Khujun
@@ -183,7 +188,7 @@ function RamadaneSchedule() {
 
           <div className="bg-stone-950/80 border border-stone-800 rounded-2xl p-3.5 text-center shadow-inner">
             <p className="text-[10px] uppercase tracking-widest text-amber-400/80 font-bold mb-2 flex items-center justify-center gap-1">
-              <Clock size={12} /> ইফতারের বাকি সময় (ডিজিটাল কাউন্টডাউন)
+              <Clock size={12} /> ইফতারের বাকি সময়
             </p>
             {timeLeft.isOver ? (
               <p className="text-sm font-bold text-emerald-400 animate-pulse">আজকের ইফতারের সময় সম্পন্ন হয়েছে!</p>
@@ -239,7 +244,7 @@ export default function App() {
   const [formData, setFormData] = useState({
     mosque: '',
     area: '',
-    type: 'কাচ্চি বিরিয়ানি',
+    type: 'বিরিয়ানি',
     images: [] as string[],
     commitment: false
   });
@@ -351,7 +356,34 @@ export default function App() {
     );
   };
 
-  // রিয়েল-টাইমে ডাটাবেসে লাইক যোগ বা বিয়োগ
+  // ছবি আপলোডের হ্যান্ডলার (Base64 হিসেবে রূপান্তর)
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+    fileArray.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result) {
+          setFormData((prev) => ({
+            ...prev,
+            images: [...prev.images, reader.result as string]
+          }));
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (indexToRemove: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, idx) => idx !== indexToRemove)
+    }));
+  };
+
+  // রিয়েল-টাইমে ডাটাবেসে লাইক
   const toggleLike = async (spotId: number) => {
     try {
       const res = await fetch('/api/spots/like', {
@@ -560,7 +592,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 2: Distance Search */}
+        {/* Tab 2: Search */}
         {activeTab === 'search' && (
           <div className="space-y-4">
             <button 
@@ -627,7 +659,7 @@ export default function App() {
           </div>
         )}
 
-        {/* HIGHLIGHTED DEVELOPER FOOTER CARD */}
+        {/* DEVELOPER FOOTER CARD */}
         <section className="pt-6">
           <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white rounded-3xl p-5 shadow-xl border border-amber-500/30 relative overflow-hidden">
             <div className="flex items-center gap-4">
@@ -645,10 +677,10 @@ export default function App() {
               <div className="space-y-1 flex-1">
                 <div className="flex items-center gap-1.5">
                   <Sparkles size={14} className="text-amber-400" />
-                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Lead Developer</span>
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Developer</span>
                 </div>
                 <h3 className="font-extrabold text-base text-white leading-snug">Abdul Latif Ayan</h3>
-                <p className="text-[11px] text-stone-300">Full Stack Software Developer</p>
+                <p className="text-[11px] text-stone-300">Web Developer</p>
                 
                 <a 
                   href="https://www.facebook.com/abdullatifayan321" 
@@ -774,7 +806,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Add Spot Modal (WITH EXACT OATH CARD FROM SCREENSHOT) */}
+      {/* Add Spot Modal (WITH FILE IMAGE UPLOAD OPTION) */}
       <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
@@ -801,7 +833,7 @@ export default function App() {
                   });
                   if ((await res.json()).success) {
                     setShowAddModal(false);
-                    setFormData({ mosque: '', area: '', type: 'কাচ্চি বিরিয়ানি', images: [], commitment: false });
+                    setFormData({ mosque: '', area: '', type: 'বিরিয়ানি', images: [], commitment: false });
                     fetchUserSpots();
                   }
                 } catch (err) { alert("ত্রুটি হয়েছে"); }
@@ -821,14 +853,49 @@ export default function App() {
                 <div>
                   <label className="text-xs font-semibold text-stone-700">খাবারের ধরন</label>
                   <select value={formData.type} onChange={e => setFormData(p => ({...p, type: e.target.value}))} className="w-full text-xs p-3 bg-stone-50 rounded-xl border mt-1 outline-none focus:ring-1 focus:ring-[#5A5A40]">
-                    <option value="কাচ্চি বিরিয়ানি">কাচ্চি বিরিয়ানি</option>
+                    <option value="খাবার নির্বাচন করুন">খাবার নির্বাচন করুন</option>
+                    <option value="বিরিয়ানি">বিরিয়ানি</option>
                     <option value="তেহারি">তেহারি</option>
                     <option value="গরুর মাংস">গরুর মাংস</option>
                     <option value="খিচুড়ি">খিচুড়ি</option>
                   </select>
                 </div>
 
-                {/* EXACT SCREENSHOT OATH BANNER */}
+                {/* IMAGE UPLOAD FIELD */}
+                <div>
+                  <label className="text-xs font-semibold text-stone-700 block mb-1">স্পটের ছবি যুক্ত করুন (ঐচ্ছিক)</label>
+                  <label className="flex items-center justify-center gap-2 border-2 border-dashed border-stone-300 bg-stone-50 hover:bg-stone-100 p-3 rounded-xl cursor-pointer transition-colors text-xs text-stone-600 font-medium">
+                    <ImagePlus size={18} className="text-[#5A5A40]" />
+                    <span>গ্যালারি থেকে ছবি বেছে নিন</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      multiple 
+                      onChange={handleImageUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+
+                  {/* Uploaded Previews */}
+                  {formData.images.length > 0 && (
+                    <div className="flex gap-2 mt-2 overflow-x-auto py-1">
+                      {formData.images.map((img, idx) => (
+                        <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 border">
+                          <img src={img} alt="preview" className="w-full h-full object-cover" />
+                          <button 
+                            type="button" 
+                            onClick={() => removeImage(idx)}
+                            className="absolute top-0.5 right-0.5 bg-black/60 text-white p-0.5 rounded-full"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* OATH BANNER */}
                 <div className="bg-[#FFF8F0] p-4 rounded-3xl border border-[#FDE6D2] space-y-3">
                   <div className="flex items-start gap-3">
                     <span className="text-amber-600 font-extrabold text-2xl leading-none">❝</span>
@@ -842,7 +909,7 @@ export default function App() {
                       <div>
                         <h4 className="font-extrabold text-stone-900 text-sm leading-snug">আমি অঙ্গীকার করছি</h4>
                         <p className="text-xs text-stone-700 font-medium leading-relaxed mt-1">
-                          আমি রোজা রেখে অঙ্গীকার করছি যে উপরে যে সকল তথ্য পূরণ করেছি তা <span className="text-orange-600 font-bold">সঠিক ও সত্য</span>। যদি কোন তথ্য মিথ্যা প্রমাণিত হয়, তাহলে আমি এর জন্যায়ী থাকব।
+                          আমি রোজা রেখে অঙ্গীকার করছি যে উপরে যে সকল তথ্য পূরণ করেছি তা <span className="text-orange-600 font-bold">সঠিক ও সত্য</span>। যদি কোন তথ্য মিথ্যা প্রমাণিত হয়, তাহলে আমি এর জন্য দায়ী থাকব।
                         </p>
                       </div>
                     </label>
