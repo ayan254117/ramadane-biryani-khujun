@@ -6,9 +6,10 @@
 import React, { useState, useEffect } from 'react';
 import { Search, MapPin, Moon, Utensils, Loader2, ExternalLink, Plus, X, Camera, CheckCircle2, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import Markdown from 'react-markdown';
-import { findBiryaniPlaces, getRamadanTimings } from './services/geminiService';
+import { findBiryaniPlaces } from './services/geminiService';
 import { cn } from './lib/utils';
+// ১. সময়সূচীর নতুন কম্পোনেন্টটি ইমপোর্ট করা হলো
+import { RamadaneSchedule } from './components/RamadaneSchedule';
 
 interface UserSpot {
   id: number;
@@ -24,10 +25,8 @@ interface UserSpot {
 export default function App() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [timingsLoading, setTimingsLoading] = useState(false);
   const [results, setResults] = useState<{ text: string; places: any[] } | null>(null);
   const [userSpots, setUserSpots] = useState<UserSpot[]>([]);
-  const [timings, setTimings] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -60,8 +59,7 @@ export default function App() {
       if (err.code === err.PERMISSION_DENIED) msg = "লোকেশন পারমিশন রিজেক্ট করা হয়েছে।";
       if (err.code === err.TIMEOUT) msg = "লোকেশন পেতে অনেক সময় লাগছে।";
       
-      setError(msg + " সাধারণ সময়সূচী দেখানো হচ্ছে।");
-      fetchTimings(null);
+      setError(msg);
     };
 
     if ("geolocation" in navigator) {
@@ -74,21 +72,12 @@ export default function App() {
       watchId = navigator.geolocation.watchPosition(handleLocationSuccess, handleLocationError, {
         enableHighAccuracy: true
       });
-    } else {
-      fetchTimings(null);
     }
 
     return () => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
     };
   }, []);
-
-  // 2. Trigger Ramadan Timings fetch when location changes
-  useEffect(() => {
-    if (location) {
-      fetchTimings(location);
-    }
-  }, [location]);
 
   const fetchUserSpots = async () => {
     try {
@@ -148,39 +137,6 @@ export default function App() {
       alert("স্পট যোগ করতে ব্যর্থ হয়েছে");
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const fetchTimings = async (loc: { lat: number; lng: number } | null) => {
-    if (!process.env.GEMINI_API_KEY) {
-      setTimings("API Key সেট করা নেই।");
-      return;
-    }
-
-    const today = new Date().toDateString();
-    const cachedTimings = localStorage.getItem('ramadan_timings');
-    const cachedDate = localStorage.getItem('ramadan_timings_date');
-
-    if (cachedTimings && cachedDate === today && !loc) {
-      setTimings(cachedTimings);
-      return;
-    }
-
-    setTimingsLoading(true);
-    try {
-      const data = await getRamadanTimings(loc?.lat, loc?.lng);
-      setTimings(data);
-      localStorage.setItem('ramadan_timings', data);
-      localStorage.setItem('ramadan_timings_date', today);
-    } catch (err: any) {
-      console.error(err);
-      if (err.message?.includes('429') || err.message?.includes('quota')) {
-        setTimings("এপিআই লিমিট শেষ হয়ে গেছে। কিছুক্ষণ পর আবার চেষ্টা করুন।");
-      } else {
-        setTimings(`সময়সূচী লোড করতে সমস্যা হয়েছে।`);
-      }
-    } finally {
-      setTimingsLoading(false);
     }
   };
 
@@ -306,64 +262,9 @@ export default function App() {
       </header>
 
       <main className="flex-1 max-w-4xl mx-auto w-full p-6 space-y-8">
-        {/* Timings Card */}
+        {/* ২. পুরোনো Timings সেকশনের জায়গায় নতুন RamadaneSchedule কম্পোনেন্ট যুক্ত করা হলো */}
         <section>
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#5A5A40]/10">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-serif text-2xl font-semibold flex items-center gap-2 text-[#5A5A40]">
-                <Moon size={24} />
-                আজকের সময়সূচী
-              </h2>
-              {location ? (
-                <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-3 py-1 rounded-full flex items-center gap-1 font-medium">
-                  <MapPin size={12} /> আপনার এলাকা
-                </span>
-              ) : (
-                <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-medium">
-                  সাধারণ সময়
-                </span>
-              )}
-            </div>
-
-            {timingsLoading ? (
-              <div className="flex flex-col items-center justify-center py-8 gap-3">
-                <Loader2 className="animate-spin text-[#5A5A40]" size={32} />
-                <p className="text-xs text-stone-400 animate-pulse">আপনার এলাকার সময়সূচী খোঁজা হচ্ছে...</p>
-              </div>
-            ) : timings !== null ? (
-              <div className="space-y-4">
-                <div className="markdown-body prose prose-stone max-w-none bg-stone-50 p-4 rounded-2xl border border-stone-100 text-sm">
-                  <Markdown>{timings}</Markdown>
-                </div>
-                {!location && (
-                  <button 
-                    onClick={() => {
-                      if ("geolocation" in navigator) {
-                        navigator.geolocation.getCurrentPosition(
-                          (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                          (err) => console.error(err),
-                          { enableHighAccuracy: true }
-                        );
-                      }
-                    }}
-                    className="text-xs text-[#5A5A40] underline hover:no-underline font-medium"
-                  >
-                    সঠিক সময়সূচীর জন্য লোকেশন অন করুন
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center py-8 gap-4">
-                <p className="text-stone-500 italic">সময়সূচী লোড করা সম্ভব হয়নি।</p>
-                <button 
-                  onClick={() => fetchTimings(location)}
-                  className="text-sm bg-[#5A5A40] text-white px-4 py-2 rounded-full font-medium"
-                >
-                  আবার চেষ্টা করুন
-                </button>
-              </div>
-            )}
-          </div>
+          <RamadaneSchedule />
         </section>
 
         {/* Search Action */}
@@ -547,12 +448,9 @@ export default function App() {
           <div className="flex flex-col items-center gap-3">
             <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#5A5A40] shadow-lg bg-white">
               <img 
-                src={profilePic} 
+                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Ayan" 
                 alt="Abdul Latif Ayan"
                 className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/avataaars/svg?seed=Ayan";
-                }}
               />
             </div>
             <div className="flex flex-col items-center gap-2">
