@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, MapPin, Moon, Sun, Utensils, Loader2, ExternalLink, ChevronRight, Plus, X, Camera, CheckCircle2, Check, Github } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, MapPin, Moon, Utensils, Loader2, ExternalLink, Plus, X, Camera, CheckCircle2, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
 import { findBiryaniPlaces, getRamadanTimings } from './services/geminiService';
@@ -41,6 +41,7 @@ export default function App() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 1. Initial Data Fetching & Geolocation
   useEffect(() => {
     fetchUserSpots();
     let watchId: number;
@@ -65,12 +66,11 @@ export default function App() {
 
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, {
-        enableHighAccuracy: false, // Faster for mobile
+        enableHighAccuracy: false,
         timeout: 10000,
         maximumAge: 60000
       });
 
-      // Watch for changes
       watchId = navigator.geolocation.watchPosition(handleLocationSuccess, handleLocationError, {
         enableHighAccuracy: true
       });
@@ -83,12 +83,19 @@ export default function App() {
     };
   }, []);
 
+  // 2. Trigger Ramadan Timings fetch when location changes
+  useEffect(() => {
+    if (location) {
+      fetchTimings(location);
+    }
+  }, [location]);
+
   const fetchUserSpots = async () => {
     try {
       const res = await fetch('/api/spots');
       const data = await res.json();
       if (data.success) {
-        setUserSpots(data.spots);
+        setUserSpots(data.spots || []);
       }
     } catch (err) {
       console.error("Failed to fetch spots", err);
@@ -134,7 +141,7 @@ export default function App() {
         setFormData({ mosque: '', area: '', type: 'কাচ্চি বিরিয়ানি', images: [], commitment: false });
         fetchUserSpots();
       } else {
-        alert(data.message);
+        alert(data.message || "স্পট যোগ করতে সমস্যা হয়েছে");
       }
     } catch (err) {
       console.error(err);
@@ -144,19 +151,12 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (location) {
-      fetchTimings(location);
-    }
-  }, [location]);
-
   const fetchTimings = async (loc: { lat: number; lng: number } | null) => {
     if (!process.env.GEMINI_API_KEY) {
       setTimings("API Key সেট করা নেই।");
       return;
     }
 
-    // Simple caching: If we already have timings for today, don't fetch again
     const today = new Date().toDateString();
     const cachedTimings = localStorage.getItem('ramadan_timings');
     const cachedDate = localStorage.getItem('ramadan_timings_date');
@@ -196,8 +196,9 @@ export default function App() {
     return R * c; // Distance in km
   };
 
-  const getImages = (images: any) => {
+  const getImages = (images: any): string[] => {
     if (!images) return [];
+    if (Array.isArray(images)) return images;
     if (typeof images === 'string') {
       try {
         const parsed = JSON.parse(images);
@@ -206,7 +207,7 @@ export default function App() {
         return [];
       }
     }
-    return Array.isArray(images) ? images : [];
+    return [];
   };
 
   const handleSearch = async () => {
@@ -259,7 +260,6 @@ export default function App() {
         })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
       }
 
-      console.log(`Total spots to display: ${allSpots.length}`);
       setResults({ 
         text: allSpots.length > 0 
           ? `আপনার আশেপাশে ${allSpots.length}টি বিরিয়ানি স্পট পাওয়া গেছে।`
@@ -283,7 +283,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800">
       {/* Header */}
       <header className="bg-[#5A5A40] text-white py-8 px-6 text-center relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
@@ -310,16 +310,16 @@ export default function App() {
         <section>
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#5A5A40]/10">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-serif text-2xl font-semibold flex items-center gap-2">
-                <Moon className="text-[#5A5A40]" size={24} />
+              <h2 className="font-serif text-2xl font-semibold flex items-center gap-2 text-[#5A5A40]">
+                <Moon size={24} />
                 আজকের সময়সূচী
               </h2>
               {location ? (
-                <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-3 py-1 rounded-full flex items-center gap-1">
+                <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-3 py-1 rounded-full flex items-center gap-1 font-medium">
                   <MapPin size={12} /> আপনার এলাকা
                 </span>
               ) : (
-                <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full">
+                <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-medium">
                   সাধারণ সময়
                 </span>
               )}
@@ -332,7 +332,7 @@ export default function App() {
               </div>
             ) : timings !== null ? (
               <div className="space-y-4">
-                <div className="markdown-body prose prose-stone max-w-none bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                <div className="markdown-body prose prose-stone max-w-none bg-stone-50 p-4 rounded-2xl border border-stone-100 text-sm">
                   <Markdown>{timings}</Markdown>
                 </div>
                 {!location && (
@@ -346,7 +346,7 @@ export default function App() {
                         );
                       }
                     }}
-                    className="text-[10px] text-[#5A5A40] underline hover:no-underline"
+                    className="text-xs text-[#5A5A40] underline hover:no-underline font-medium"
                   >
                     সঠিক সময়সূচীর জন্য লোকেশন অন করুন
                   </button>
@@ -357,7 +357,7 @@ export default function App() {
                 <p className="text-stone-500 italic">সময়সূচী লোড করা সম্ভব হয়নি।</p>
                 <button 
                   onClick={() => fetchTimings(location)}
-                  className="text-sm bg-[#5A5A40] text-white px-4 py-2 rounded-full"
+                  className="text-sm bg-[#5A5A40] text-white px-4 py-2 rounded-full font-medium"
                 >
                   আবার চেষ্টা করুন
                 </button>
@@ -407,43 +407,46 @@ export default function App() {
               সদস্যদের যোগ করা স্পট
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {userSpots.map((spot) => (
-                <motion.div
-                  key={spot.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-white rounded-3xl overflow-hidden shadow-sm border border-[#5A5A40]/10 flex flex-col"
-                >
-                  {getImages(spot.images).length > 0 && (
-                    <div className="h-48 overflow-hidden">
-                      <img 
-                        src={getImages(spot.images)[0]} 
-                        alt={spot.mosque_name}
-                        className="w-full h-full object-cover"
-                      />
+              {userSpots.map((spot) => {
+                const spotImages = getImages(spot.images);
+                return (
+                  <motion.div
+                    key={spot.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-3xl overflow-hidden shadow-sm border border-[#5A5A40]/10 flex flex-col justify-between"
+                  >
+                    {spotImages.length > 0 && (
+                      <div className="h-48 overflow-hidden">
+                        <img 
+                          src={spotImages[0]} 
+                          alt={spot.mosque_name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="p-6">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
+                        <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-2 py-1 rounded-full font-bold">
+                          {spot.food_type}
+                        </span>
+                      </div>
+                      <p className="text-stone-500 flex items-center gap-1 text-sm mb-4">
+                        <MapPin size={14} /> {spot.area}
+                      </p>
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-[#5A5A40] font-medium flex items-center gap-1 hover:underline"
+                      >
+                        ম্যাপে দেখুন <ExternalLink size={14} />
+                      </a>
                     </div>
-                  )}
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
-                      <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-2 py-1 rounded-full">
-                        {spot.food_type}
-                      </span>
-                    </div>
-                    <p className="text-stone-500 flex items-center gap-1 text-sm mb-4">
-                      <MapPin size={14} /> {spot.area}
-                    </p>
-                    <a 
-                      href={`https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-[#5A5A40] font-medium flex items-center gap-1 hover:underline"
-                    >
-                      ম্যাপে দেখুন <ExternalLink size={14} />
-                    </a>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
           </section>
         )}
@@ -459,8 +462,8 @@ export default function App() {
             >
               <div className="bg-white rounded-3xl p-8 shadow-sm border border-[#5A5A40]/10">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-serif text-2xl font-bold flex items-center gap-2">
-                    <Utensils size={24} className="text-[#5A5A40]" />
+                  <h3 className="font-serif text-2xl font-bold flex items-center gap-2 text-[#5A5A40]">
+                    <Utensils size={24} />
                     খুঁজে পাওয়া বিরিয়ানি স্পট
                   </h3>
                   <span className="bg-[#5A5A40] text-white px-4 py-1 rounded-full text-sm font-bold">
@@ -469,65 +472,67 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4">
-                  {results.places.map((spot: any, idx: number) => (
-                    <motion.div
-                      key={idx}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.1 }}
-                      className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-stone-100 bg-stone-50 hover:bg-stone-100 transition-all group"
-                    >
-                      {/* Photo if available */}
-                      {getImages(spot.images).length > 0 ? (
-                        <div className="w-full md:w-32 h-32 rounded-xl overflow-hidden flex-shrink-0">
-                          <img 
-                            src={getImages(spot.images)[0]} 
-                            alt={spot.mosque_name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-full md:w-32 h-32 rounded-xl bg-stone-200 flex items-center justify-center flex-shrink-0 text-stone-400">
-                          <Camera size={32} />
-                        </div>
-                      )}
-
-                      <div className="flex-1 flex flex-col justify-between">
-                        <div>
-                          <div className="flex justify-between items-start">
-                            <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
-                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold">
-                              {spot.food_type}
-                            </span>
+                  {results.places.map((spot: any, idx: number) => {
+                    const spotImages = getImages(spot.images);
+                    return (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-stone-100 bg-stone-50 hover:bg-stone-100 transition-all group"
+                      >
+                        {spotImages.length > 0 ? (
+                          <div className="w-full md:w-32 h-32 rounded-xl overflow-hidden flex-shrink-0">
+                            <img 
+                              src={spotImages[0]} 
+                              alt={spot.mosque_name}
+                              className="w-full h-full object-cover"
+                            />
                           </div>
-                          <p className="text-stone-500 flex items-center gap-1 text-sm mt-1">
-                            <MapPin size={14} /> {spot.area}
-                          </p>
-                        </div>
-
-                        <div className="mt-4 flex justify-between items-end">
-                          <div className="text-[#5A5A40]">
-                            {spot.distance !== undefined && (
-                              <p className="text-xs font-bold bg-[#5A5A40]/10 px-2 py-1 rounded-lg inline-block">
-                                {spot.distance.toFixed(2)} কিমি দূরে
-                              </p>
-                            )}
-                            {spot.source === 'ai' && (
-                              <p className="text-[10px] text-stone-400 mt-1 italic">AI দ্বারা খুঁজে পাওয়া</p>
-                            )}
+                        ) : (
+                          <div className="w-full md:w-32 h-32 rounded-xl bg-stone-200 flex items-center justify-center flex-shrink-0 text-stone-400">
+                            <Camera size={32} />
                           </div>
-                          <a 
-                            href={spot.uri || `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-[#5A5A40] text-white p-2 rounded-xl hover:scale-110 transition-transform"
-                          >
-                            <ExternalLink size={18} />
-                          </a>
+                        )}
+
+                        <div className="flex-1 flex flex-col justify-between">
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <h4 className="font-serif text-xl font-bold text-[#5A5A40]">{spot.mosque_name}</h4>
+                              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold">
+                                {spot.food_type}
+                              </span>
+                            </div>
+                            <p className="text-stone-500 flex items-center gap-1 text-sm mt-1">
+                              <MapPin size={14} /> {spot.area}
+                            </p>
+                          </div>
+
+                          <div className="mt-4 flex justify-between items-end">
+                            <div className="text-[#5A5A40]">
+                              {spot.distance !== undefined && (
+                                <p className="text-xs font-bold bg-[#5A5A40]/10 px-2 py-1 rounded-lg inline-block">
+                                  {spot.distance.toFixed(2)} কিমি দূরে
+                                </p>
+                              )}
+                              {spot.source === 'ai' && (
+                                <p className="text-[10px] text-stone-400 mt-1 italic">AI দ্বারা খুঁজে পাওয়া</p>
+                              )}
+                            </div>
+                            <a 
+                              href={spot.uri || `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-[#5A5A40] text-white p-2 rounded-xl hover:scale-110 transition-transform"
+                            >
+                              <ExternalLink size={18} />
+                            </a>
+                          </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
             </motion.section>
@@ -630,7 +635,7 @@ export default function App() {
                   <div className="flex flex-wrap gap-2">
                     {formData.images.map((img, i) => (
                       <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-stone-200">
-                        <img src={img} className="w-full h-full object-cover" />
+                        <img src={img} alt={`Upload ${i}`} className="w-full h-full object-cover" />
                         <button 
                           type="button"
                           onClick={() => setFormData(prev => ({ ...prev, images: prev.images.filter((_, idx) => idx !== i) }))}
