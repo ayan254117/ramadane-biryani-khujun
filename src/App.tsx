@@ -547,10 +547,9 @@ export default function App() {
           <div className="flex flex-col items-center gap-3">
             <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#5A5A40] shadow-lg bg-white">
               <img 
-                src="https://scontent.fdac24-2.fna.fbcdn.net/v/t39.30808-6/710742253_1323666233161968_8711385721558190984_n.jpg?stp=dst-jpg_tt6&cstp=mx1107x1109&ctp=s1107x1109&_nc_cat=100&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=a5f93a&_nc_ohc=gU4cLUKzXHsQ7kNvwED1D2t&_nc_oc=AdqJXeQZE-LD-k-JeqpcEaHiXCa9Ni2S6yLRtQXjVO7rFpDh2hG9SBufhxTuh0EMzfg&_nc_zt=23&_nc_ht=scontent.fdac24-2.fna&_nc_gid=Q1SAqYunYSQg8_hQArucoA&_nc_ss=7b289&oh=00_AQFCIy-RFI9W7dQN8V8Ww22ET15FOoMlGaxoH6QVmvUZXg&oe=6A877AEF" 
+                src={profilePic} 
                 alt="Abdul Latif Ayan"
                 className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/avataaars/svg?seed=Ayan";
                 }}
