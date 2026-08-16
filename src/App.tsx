@@ -13,9 +13,8 @@ import profilePic from './assets/ayan.jpg';
 // ==========================================
 // ১. হেলপার ফাংশন (খাবারের নাম ক্লিন করার জন্য)
 // ==========================================
-const cleanFoodType = (typeStr: string | undefined | null) => {
+const cleanFoodType = (typeStr?: string | null): string => {
   if (!typeStr) return 'বিরিয়ানি';
-  // হাইফেন বা ড্যাশ থাকলে একদম শেষের খাবারের ধরণটি পৃথক করবে
   if (typeStr.includes('-')) {
     const parts = typeStr.split('-');
     return parts[parts.length - 1].trim();
@@ -33,14 +32,12 @@ function RamadaneSchedule() {
   const [schedule, setSchedule] = useState<{ sehri: string; iftar: string } | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
-  // ইংরেজি সংখ্যাকে বাংলায় রূপান্তর
   const toBanglaDigits = (str: string | number) => {
     const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
     return str.toString().replace(/\d/g, (x) => banglaDigits[parseInt(x, 10)]);
   };
 
-  // হিজরি মাসের বাংলা নাম
-  const hijriMonthsBn: { [key: string]: string } = {
+  const hijriMonthsBn: Record<string, string> = {
     'Muḥarram': 'মহররম',
     'Ṣafar': 'সফর',
     'Rabīʿ al-awwal': 'রবিউল আউয়াল',
@@ -55,7 +52,6 @@ function RamadaneSchedule() {
     'Dhū al-Ḥijjah': 'জিলহজ্জ'
   };
 
-  // লাইভ ঘড়ি
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -63,12 +59,11 @@ function RamadaneSchedule() {
     return () => clearInterval(timer);
   }, []);
 
-  // 24hr সময়কে 12hr AM/PM ফরমেটে নেওয়া
   const format12Hour = (time24: string) => {
     if (!time24) return '';
     const [hoursStr, minutesStr] = time24.split(':');
     let hours = parseInt(hoursStr, 10);
-    const minutes = minutesStr.split(' ')[0];
+    const minutes = minutesStr ? minutesStr.split(' ')[0] : '00';
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12;
@@ -87,7 +82,7 @@ function RamadaneSchedule() {
           try {
             const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
             const geoData = await geoRes.json();
-            const area = geoData.address.city || geoData.address.town || geoData.address.suburb || geoData.address.state || 'ঢাকা';
+            const area = geoData?.address?.city || geoData?.address?.town || geoData?.address?.suburb || geoData?.address?.state || 'ঢাকা';
             setLocationName(`${area}, বাংলাদেশ`);
           } catch (e) {
             setLocationName('ঢাকা, বাংলাদেশ');
@@ -128,7 +123,6 @@ function RamadaneSchedule() {
     }
   }, []);
 
-  // তারিখ ও লাইভ টাইম ফরম্যাটিং
   const hours = currentTime.getHours();
   const minutes = currentTime.getMinutes();
   const seconds = currentTime.getSeconds();
@@ -187,7 +181,6 @@ function RamadaneSchedule() {
             </div>
           )}
 
-          {/* লাইভ টাইম ওয়াচ সেকশন */}
           <div className="mt-4 pt-4 border-t border-stone-100 text-center bg-stone-50 rounded-2xl p-3">
             <p className="text-xl font-bold text-[#5A5A40]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
               {timeString}
@@ -223,11 +216,11 @@ interface UserSpot {
 
 export default function App() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [results, setResults] = useState<{ text: string; places: any[] } | null>(null);
   const [userSpots, setUserSpots] = useState<UserSpot[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
 
   const [formData, setFormData] = useState({
     mosque: '',
@@ -236,18 +229,17 @@ export default function App() {
     images: [] as string[],
     commitment: false
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     fetchUserSpots();
     let watchId: number;
 
     const handleLocationSuccess = (position: GeolocationPosition) => {
-      const newLoc = {
+      setLocation({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
-      };
-      setLocation(newLoc);
+      });
     };
 
     const handleLocationError = (err: GeolocationPositionError) => {
@@ -382,7 +374,8 @@ export default function App() {
         }));
       }
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      // Safe Environment Access for Vite TypeScript
+      const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
       if (apiKey) {
         try {
           const aiData = await findBiryaniPlaces(location?.lat, location?.lng);
@@ -457,7 +450,6 @@ export default function App() {
       </header>
 
       <main className="flex-1 max-w-4xl mx-auto w-full p-6 space-y-8">
-        {/* রমজান সময়সূচী সেকশন */}
         <section>
           <RamadaneSchedule />
         </section>
@@ -547,7 +539,7 @@ export default function App() {
           </section>
         )}
 
-        {/* Results */}
+        {/* Search Results */}
         <AnimatePresence mode="wait">
           {results && (
             <motion.section
