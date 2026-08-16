@@ -4,13 +4,115 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Moon, Utensils, Loader2, ExternalLink, Plus, X, Camera, CheckCircle2, Check } from 'lucide-react';
+import { Search, MapPin, Moon, Utensils, Loader2, ExternalLink, Plus, X, Camera, CheckCircle2, Check, Clock, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { findBiryaniPlaces } from './services/geminiService';
 import { cn } from './lib/utils';
-// ১. সময়সূচীর নতুন কম্পোনেন্টটি ইমপোর্ট করা হলো
-import { RamadaneSchedule } from './components/RamadaneSchedule';
 
+// ==========================================
+// ১. রমজান সময়সূচী কম্পোনেন্ট (App.tsx-এর ভেতরেই)
+// ==========================================
+function RamadaneSchedule() {
+  const [hijriDate, setHijriDate] = useState<string>('');
+  const [locationName, setLocationName] = useState<string>('ঢাকা');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [schedule, setSchedule] = useState<{ sehri: string; iftar: string } | null>(null);
+  const [nextEvent, setNextEvent] = useState<{ name: string; timeRemaining: string } | null>(null);
+
+  useEffect(() => {
+    // লোকেশন ও সময়সূচী ফেচ করার লজিক
+    const fetchScheduleData = async (lat?: number, lng?: number) => {
+      try {
+        setLoading(true);
+        const targetLat = lat || 23.8103;
+        const targetLng = lng || 90.4125;
+
+        // Aladhan API দিয়ে সময়সূচী ও হিজরি তারিখ আনা
+        const res = await fetch(`https://api.aladhan.com/v1/timings?latitude=${targetLat}&longitude=${targetLng}&method=1`);
+        const data = await res.json();
+
+        if (data.code === 200) {
+          const timings = data.data.timings;
+          const dateInfo = data.data.date.hijri;
+
+          setSchedule({
+            sehri: timings.Fajr,
+            iftar: timings.Maghrib
+          });
+
+          setHijriDate(`${dateInfo.day} ${dateInfo.month.en} ${dateInfo.year} AH`);
+        }
+      } catch (err) {
+        console.error("Failed to fetch timings", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLocationName("আপনার এলাকা");
+          fetchScheduleData(pos.coords.latitude, pos.coords.longitude);
+        },
+        () => fetchScheduleData()
+      );
+    } else {
+      fetchScheduleData();
+    }
+  }, []);
+
+  return (
+    <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#5A5A40]/10">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-serif text-2xl font-semibold flex items-center gap-2 text-[#5A5A40]">
+          <Moon size={24} />
+          আজকের সময়সূচী
+        </h2>
+        <span className="text-xs bg-[#5A5A40]/10 text-[#5A5A40] px-3 py-1 rounded-full flex items-center gap-1 font-medium">
+          <MapPin size={12} /> {locationName}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-8 gap-3">
+          <Loader2 className="animate-spin text-[#5A5A40]" size={32} />
+          <p className="text-xs text-stone-400 animate-pulse">সময়সূচী লোড হচ্ছে...</p>
+        </div>
+      ) : schedule ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-stone-500 font-medium">সেহরির শেষ সময়</p>
+              <p className="text-2xl font-serif font-bold text-[#5A5A40]">{schedule.sehri}</p>
+            </div>
+            <Clock className="text-[#5A5A40]/40" size={28} />
+          </div>
+
+          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-stone-500 font-medium">ইফতারের সময়</p>
+              <p className="text-2xl font-serif font-bold text-[#5A5A40]">{schedule.iftar}</p>
+            </div>
+            <Utensils className="text-[#5A5A40]/40" size={28} />
+          </div>
+
+          {hijriDate && (
+            <div className="md:col-span-2 text-center pt-2 text-xs text-stone-500 flex items-center justify-center gap-1">
+              <Calendar size={14} /> হিজরি তারিখ: <span className="font-semibold">{hijriDate}</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-center py-4 text-stone-500 text-sm">সময়সূচী পাওয়া যায়নি</p>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// ২. মূল App কম্পোনেন্ট
+// ==========================================
 interface UserSpot {
   id: number;
   mosque_name: string;
@@ -40,7 +142,6 @@ export default function App() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. Initial Data Fetching & Geolocation
   useEffect(() => {
     fetchUserSpots();
     let watchId: number;
@@ -58,7 +159,6 @@ export default function App() {
       let msg = "লোকেশন অ্যাক্সেস পাওয়া যায়নি।";
       if (err.code === err.PERMISSION_DENIED) msg = "লোকেশন পারমিশন রিজেক্ট করা হয়েছে।";
       if (err.code === err.TIMEOUT) msg = "লোকেশন পেতে অনেক সময় লাগছে।";
-      
       setError(msg);
     };
 
@@ -141,7 +241,7 @@ export default function App() {
   };
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Radius of the earth in km
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = 
@@ -149,7 +249,7 @@ export default function App() {
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
       Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in km
+    return R * c;
   };
 
   const getImages = (images: any): string[] => {
@@ -171,7 +271,6 @@ export default function App() {
     setError(null);
     setResults(null);
     try {
-      // 1. Fetch from DB
       const res = await fetch('/api/spots');
       const dbData = await res.json();
       
@@ -187,7 +286,6 @@ export default function App() {
         }));
       }
 
-      // 2. Fetch from Gemini (AI Search)
       if (process.env.GEMINI_API_KEY) {
         try {
           const aiData = await findBiryaniPlaces(location?.lat, location?.lng);
@@ -233,7 +331,7 @@ export default function App() {
       }
       setError(msg);
       console.error(err);
-    } finally {
+    } fontically {
       setLoading(false);
     }
   };
@@ -262,7 +360,7 @@ export default function App() {
       </header>
 
       <main className="flex-1 max-w-4xl mx-auto w-full p-6 space-y-8">
-        {/* ২. পুরোনো Timings সেকশনের জায়গায় নতুন RamadaneSchedule কম্পোনেন্ট যুক্ত করা হলো */}
+        {/* রমজান সময়সূচী সেকশন */}
         <section>
           <RamadaneSchedule />
         </section>
