@@ -10,24 +10,21 @@ import { findBiryaniPlaces } from './services/geminiService';
 import { cn } from './lib/utils';
 
 // ==========================================
-// ১. রমজান সময়সূচী কম্পোনেন্ট (App.tsx-এর ভেতরেই)
+// ১. রমজান সময়সূচী কম্পোনেন্ট
 // ==========================================
 function RamadaneSchedule() {
   const [hijriDate, setHijriDate] = useState<string>('');
   const [locationName, setLocationName] = useState<string>('ঢাকা');
   const [loading, setLoading] = useState<boolean>(true);
   const [schedule, setSchedule] = useState<{ sehri: string; iftar: string } | null>(null);
-  const [nextEvent, setNextEvent] = useState<{ name: string; timeRemaining: string } | null>(null);
 
   useEffect(() => {
-    // লোকেশন ও সময়সূচী ফেচ করার লজিক
     const fetchScheduleData = async (lat?: number, lng?: number) => {
       try {
         setLoading(true);
         const targetLat = lat || 23.8103;
         const targetLng = lng || 90.4125;
 
-        // Aladhan API দিয়ে সময়সূচী ও হিজরি তারিখ আনা
         const res = await fetch(`https://api.aladhan.com/v1/timings?latitude=${targetLat}&longitude=${targetLng}&method=1`);
         const data = await res.json();
 
@@ -132,7 +129,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState({
     mosque: '',
     area: '',
@@ -331,7 +327,7 @@ export default function App() {
       }
       setError(msg);
       console.error(err);
-    } fontically {
+    } finally {
       setLoading(false);
     }
   };
