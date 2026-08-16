@@ -279,19 +279,35 @@ export default function App() {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // -------------------------------------------------------------
+  // আপডেট করা ফাইল রিডার প্রমিস হ্যান্ডলার (ছবি সঠিক ও দ্রুত আপলোডের জন্য)
+  // -------------------------------------------------------------
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files) {
-      Array.from(files).forEach(file => {
+    if (!files || files.length === 0) return;
+
+    const readAsBase64 = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => {
-          setFormData(prev => ({
-            ...prev,
-            images: [...prev.images, reader.result as string]
-          }));
-        };
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
         reader.readAsDataURL(file);
       });
+    };
+
+    try {
+      const fileList = Array.from(files);
+      const base64Images = await Promise.all(fileList.map(file => readAsBase64(file)));
+      
+      setFormData(prev => ({
+        ...prev,
+        images: [...prev.images, ...base64Images]
+      }));
+    } catch (err) {
+      console.error("Image loading error:", err);
+      alert("ছবি রিড করতে ব্যর্থ হয়েছে, অনুগ্রহ করে অন্য ছবি নির্বাচন করুন।");
+    } finally {
+      e.target.value = ''; // রিসেট করা যেন একই ছবি বারবার সিলেক্ট করা যায়
     }
   };
 
@@ -504,11 +520,14 @@ export default function App() {
                     className="bg-white rounded-3xl overflow-hidden shadow-sm border border-[#5A5A40]/10 flex flex-col justify-between"
                   >
                     {spotImages.length > 0 && (
-                      <div className="h-48 overflow-hidden">
+                      <div className="h-48 overflow-hidden bg-stone-100">
                         <img 
                           src={spotImages[0]} 
                           alt={spot.mosque_name}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
                         />
                       </div>
                     )}
@@ -570,11 +589,14 @@ export default function App() {
                         className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-stone-100 bg-stone-50 hover:bg-stone-100 transition-all group"
                       >
                         {spotImages.length > 0 ? (
-                          <div className="w-full md:w-32 h-32 rounded-xl overflow-hidden flex-shrink-0">
+                          <div className="w-full md:w-32 h-32 rounded-xl overflow-hidden flex-shrink-0 bg-stone-200">
                             <img 
                               src={spotImages[0]} 
                               alt={spot.mosque_name}
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                             />
                           </div>
                         ) : (
