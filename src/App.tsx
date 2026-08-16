@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, MapPin, Utensils, Loader2, ExternalLink, Plus, X, 
   Clock, Heart, Share2, Bookmark, MessageSquare, Home, Compass, 
-  BookmarkCheck, User, Facebook, Code, Sparkles
+  BookmarkCheck, User, Facebook, Code, Sparkles, Quote
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { findBiryaniPlaces } from './services/geminiService';
@@ -15,7 +15,29 @@ import { cn } from './lib/utils';
 import profilePic from '../assets/Abdul Latif-Ayan.jpg';
 
 // ==========================================
-// ১. হেলপার ফাংশন
+// ১. ব্রান্ড লোগো কম্পোনেন্ট (ক্লিক করলে হোম পেজে নিয়ে যাবে)
+// ==========================================
+const AppLogo = ({ onClick }: { onClick?: () => void }) => (
+  <div 
+    onClick={onClick}
+    className="flex items-center gap-2 cursor-pointer group select-none active:scale-95 transition-transform"
+  >
+    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#5A5A40] to-amber-600 p-0.5 shadow-md shadow-amber-900/10">
+      <div className="w-full h-full bg-stone-900 rounded-[14px] flex items-center justify-center border border-amber-400/30">
+        <span className="text-amber-400 font-extrabold text-lg tracking-tighter">BK</span>
+      </div>
+    </div>
+    <div>
+      <h1 className="font-extrabold text-base text-stone-900 leading-tight tracking-tight group-hover:text-[#5A5A40] transition-colors">
+        Biryani Khujun
+      </h1>
+      <p className="text-[10px] text-stone-500 font-semibold tracking-wide">রমজান ইফতার ফাইন্ডার</p>
+    </div>
+  </div>
+);
+
+// ==========================================
+// ২. হেলপার ফাংশনসমূহ
 // ==========================================
 const cleanFoodType = (typeStr?: string | null): string => {
   if (!typeStr) return 'বিরিয়ানি';
@@ -43,7 +65,7 @@ const COMMENT_SHORTCUTS = [
 ];
 
 // ==========================================
-// ২. আল্ট্রা-মডার্ন ডিজিটাল ইফতার কাউন্টডাউন
+// ৩. আল্ট্রা-মডার্ন ডিজিটাল ইফতার কাউন্টডাউন
 // ==========================================
 function RamadaneSchedule() {
   const [locationName, setLocationName] = useState<string>('ঢাকা, বাংলাদেশ');
@@ -129,7 +151,6 @@ function RamadaneSchedule() {
 
   return (
     <div className="bg-gradient-to-br from-stone-900 via-stone-800 to-black text-white rounded-[2rem] p-5 shadow-2xl relative overflow-hidden border border-amber-500/20">
-      {/* Background Decorative Elements */}
       <div className="absolute -right-10 -top-10 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
       <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
@@ -160,7 +181,6 @@ function RamadaneSchedule() {
             </div>
           </div>
 
-          {/* Modern Digital Clock Display */}
           <div className="bg-stone-950/80 border border-stone-800 rounded-2xl p-3.5 text-center shadow-inner">
             <p className="text-[10px] uppercase tracking-widest text-amber-400/80 font-bold mb-2 flex items-center justify-center gap-1">
               <Clock size={12} /> ইফতারের বাকি সময় (ডিজিটাল কাউন্টডাউন)
@@ -199,7 +219,7 @@ function RamadaneSchedule() {
 }
 
 // ==========================================
-// ৩. মূল App কম্পোনেন্ট
+// ৪. মূল App কম্পোনেন্ট
 // ==========================================
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'saved'>('home');
@@ -210,13 +230,11 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
 
   const [savedSpots, setSavedSpots] = useState<number[]>([]);
-  const [reactions, setReactions] = useState<Record<number, { likes: number; liked: boolean }>>({});
   
   const [selectedSpotForComment, setSelectedSpotForComment] = useState<any | null>(null);
   const [userNameInput, setUserNameInput] = useState<string>('');
   const [commentInput, setCommentInput] = useState<string>('');
   const [shortcutSelect, setShortcutSelect] = useState<string>('');
-  const [spotComments, setSpotComments] = useState<Record<number, { userName: string; text: string; date: string }[]>>({});
 
   const [formData, setFormData] = useState({
     mosque: '',
@@ -298,6 +316,8 @@ export default function App() {
               lng: currentLng,
               uri: place.uri,
               source: 'ai',
+              likes_count: 0,
+              comments: [],
               images: "[]"
             }));
             allSpots = [...allSpots, ...aiSpots];
@@ -331,20 +351,24 @@ export default function App() {
     );
   };
 
-  const toggleLike = (spotId: number) => {
-    setReactions(prev => {
-      const current = prev[spotId] || { likes: 0, liked: false };
-      return {
-        ...prev,
-        [spotId]: {
-          likes: current.liked ? current.likes - 1 : current.likes + 1,
-          liked: !current.liked
-        }
-      };
-    });
+  // রিয়েল-টাইমে ডাটাবেসে লাইক যোগ বা বিয়োগ
+  const toggleLike = async (spotId: number) => {
+    try {
+      const res = await fetch('/api/spots/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotId })
+      });
+      if (res.ok) {
+        fetchUserSpots();
+      }
+    } catch (e) {
+      console.error("Like failed", e);
+    }
   };
 
-  const handleAddComment = (spotId: number) => {
+  // রিয়েল-টাইমে ডাটাবেসে কমেন্ট সেভ
+  const handleAddComment = async (spotId: number) => {
     const finalComment = shortcutSelect || commentInput.trim();
     if (!userNameInput.trim()) {
       alert("অনুগ্রহ করে আপনার নাম দিন।");
@@ -355,19 +379,27 @@ export default function App() {
       return;
     }
 
-    const newEntry = {
-      userName: userNameInput.trim(),
-      text: finalComment,
-      date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
+    try {
+      const res = await fetch('/api/spots/comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spotId,
+          userName: userNameInput.trim(),
+          text: finalComment
+        })
+      });
 
-    setSpotComments(prev => ({
-      ...prev,
-      [spotId]: [...(prev[spotId] || []), newEntry]
-    }));
-
-    setCommentInput('');
-    setShortcutSelect('');
+      if (res.ok) {
+        setCommentInput('');
+        setShortcutSelect('');
+        await fetchUserSpots();
+        const updated = userSpots.find(s => s.id === spotId);
+        if (updated) setSelectedSpotForComment(updated);
+      }
+    } catch (e) {
+      alert("কমেন্ট যোগ করতে সমস্যা হয়েছে");
+    }
   };
 
   const shareSpot = (spot: any) => {
@@ -396,21 +428,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 pb-24 font-sans select-none antialiased">
-      {/* App Header */}
+      {/* App Header with Interactive Logo */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-stone-200 px-4 py-3 flex items-center justify-between shadow-sm max-w-md mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-[#5A5A40] text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-md shadow-[#5A5A40]/20">
-            র
-          </div>
-          <div>
-            <h1 className="font-bold text-base text-stone-800 leading-tight">বিরিয়ানি খুঁজুন</h1>
-            <p className="text-[10px] text-stone-500 font-medium">রমজান ইফতার ফাইন্ডার</p>
-          </div>
-        </div>
+        <AppLogo onClick={() => setActiveTab('home')} />
 
         <button 
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 bg-[#5A5A40] text-white px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm active:scale-95 transition-transform"
+          className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] text-white px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm active:scale-95 transition-all"
         >
           <Plus size={16} /> স্পট যোগ
         </button>
@@ -458,8 +482,7 @@ export default function App() {
                 userSpots.map((spot) => {
                   const imgs = getImages(spot.images);
                   const isSaved = savedSpots.includes(spot.id);
-                  const react = reactions[spot.id] || { likes: 0, liked: false };
-                  const comments = spotComments[spot.id] || [];
+                  const commentsList = spot.comments || [];
 
                   return (
                     <motion.div 
@@ -499,8 +522,8 @@ export default function App() {
                               onClick={() => toggleLike(spot.id)}
                               className="flex items-center gap-1 text-xs font-semibold hover:text-red-500 transition-colors"
                             >
-                              <Heart size={16} className={cn(react.liked && "fill-red-500 text-red-500")} />
-                              <span>{react.likes}</span>
+                              <Heart size={16} className={cn(spot.likes_count > 0 && "fill-red-500 text-red-500")} />
+                              <span>{spot.likes_count || 0}</span>
                             </button>
 
                             <button 
@@ -508,7 +531,7 @@ export default function App() {
                               className="flex items-center gap-1 text-xs font-semibold hover:text-[#5A5A40] transition-colors"
                             >
                               <MessageSquare size={16} />
-                              <span>{comments.length}</span>
+                              <span>{commentsList.length}</span>
                             </button>
 
                             <button 
@@ -608,7 +631,6 @@ export default function App() {
         <section className="pt-6">
           <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white rounded-3xl p-5 shadow-xl border border-amber-500/30 relative overflow-hidden">
             <div className="flex items-center gap-4">
-              {/* Profile Image with Glow Border */}
               <div className="relative">
                 <img 
                   src={profilePic} 
@@ -620,7 +642,6 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Developer Info */}
               <div className="space-y-1 flex-1">
                 <div className="flex items-center gap-1.5">
                   <Sparkles size={14} className="text-amber-400" />
@@ -629,7 +650,6 @@ export default function App() {
                 <h3 className="font-extrabold text-base text-white leading-snug">Abdul Latif Ayan</h3>
                 <p className="text-[11px] text-stone-300">Full Stack Software Developer</p>
                 
-                {/* Facebook Button */}
                 <a 
                   href="https://www.facebook.com/abdullatifayan321" 
                   target="_blank" 
@@ -643,7 +663,7 @@ export default function App() {
             </div>
 
             <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center text-[10px] text-stone-400 font-medium">
-              <span>© 2026 Ramadan Biryani Khujun</span>
+              <span>© 2026 Biryani Khujun</span>
               <span>Dhaka, Bangladesh</span>
             </div>
           </div>
@@ -692,16 +712,16 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-2 py-2">
-                {(spotComments[selectedSpotForComment.id] || []).length === 0 ? (
+                {(!selectedSpotForComment.comments || selectedSpotForComment.comments.length === 0) ? (
                   <p className="text-xs text-stone-400 text-center py-6">এখনো কোনো কমেন্ট করা হয়নি। প্রথম কমেন্টটি আপনি দিন!</p>
                 ) : (
-                  (spotComments[selectedSpotForComment.id] || []).map((c, i) => (
+                  selectedSpotForComment.comments.map((c: any, i: number) => (
                     <div key={i} className="bg-stone-50 p-3 rounded-2xl border border-stone-100 space-y-1">
                       <div className="flex justify-between items-center">
                         <span className="text-[11px] font-bold text-[#5A5A40] flex items-center gap-1">
-                          <User size={12} /> {c.userName}
+                          <User size={12} /> {c.userName || c.user_name}
                         </span>
-                        <span className="text-[9px] text-stone-400">{c.date}</span>
+                        <span className="text-[9px] text-stone-400">{c.date || "এখনই"}</span>
                       </div>
                       <p className="text-xs text-stone-700 font-medium">{c.text}</p>
                     </div>
@@ -754,7 +774,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Add Spot Modal */}
+      {/* Add Spot Modal (WITH EXACT OATH CARD FROM SCREENSHOT) */}
       <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
@@ -762,7 +782,7 @@ export default function App() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-white rounded-t-[2rem] w-full max-w-md p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+              className="bg-white rounded-t-[2rem] w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl"
             >
               <div className="flex justify-between items-center border-b pb-3">
                 <h3 className="font-bold text-base text-[#5A5A40]">নতুন ইফতার স্পট যোগ করুন</h3>
@@ -786,21 +806,21 @@ export default function App() {
                   }
                 } catch (err) { alert("ত্রুটি হয়েছে"); }
                 finally { setIsSubmitting(false); }
-              }} className="space-y-3">
+              }} className="space-y-4">
                 
                 <div>
-                  <label className="text-xs font-medium text-stone-600">মসজিদের নাম</label>
-                  <input required type="text" value={formData.mosque} onChange={e => setFormData(p => ({...p, mosque: e.target.value}))} placeholder="যেমন: বাইতুল মামুর জামে মসজিদ" className="w-full text-xs p-3 bg-stone-50 rounded-xl border mt-1 outline-none" />
+                  <label className="text-xs font-semibold text-stone-700">মসজিদের নাম</label>
+                  <input required type="text" value={formData.mosque} onChange={e => setFormData(p => ({...p, mosque: e.target.value}))} placeholder="যেমন: বাইতুল মামুর জামে মসজিদ" className="w-full text-xs p-3 bg-stone-50 rounded-xl border mt-1 outline-none focus:ring-1 focus:ring-[#5A5A40]" />
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-stone-600">এলাকা</label>
-                  <input required type="text" value={formData.area} onChange={e => setFormData(p => ({...p, area: e.target.value}))} placeholder="যেমন: ধানমন্ডি, ঢাকা" className="w-full text-xs p-3 bg-stone-50 rounded-xl border mt-1 outline-none" />
+                  <label className="text-xs font-semibold text-stone-700">এলাকা</label>
+                  <input required type="text" value={formData.area} onChange={e => setFormData(p => ({...p, area: e.target.value}))} placeholder="যেমন: ধানমন্ডি, ঢাকা" className="w-full text-xs p-3 bg-stone-50 rounded-xl border mt-1 outline-none focus:ring-1 focus:ring-[#5A5A40]" />
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-stone-600">খাবারের ধরন</label>
-                  <select value={formData.type} onChange={e => setFormData(p => ({...p, type: e.target.value}))} className="w-full text-xs p-3 bg-stone-50 rounded-xl border mt-1 outline-none">
+                  <label className="text-xs font-semibold text-stone-700">খাবারের ধরন</label>
+                  <select value={formData.type} onChange={e => setFormData(p => ({...p, type: e.target.value}))} className="w-full text-xs p-3 bg-stone-50 rounded-xl border mt-1 outline-none focus:ring-1 focus:ring-[#5A5A40]">
                     <option value="কাচ্চি বিরিয়ানি">কাচ্চি বিরিয়ানি</option>
                     <option value="তেহারি">তেহারি</option>
                     <option value="গরুর মাংস">গরুর মাংস</option>
@@ -808,14 +828,37 @@ export default function App() {
                   </select>
                 </div>
 
-                <div className="bg-orange-50 p-3 rounded-xl border border-orange-200 text-xs space-y-2">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={formData.commitment} onChange={e => setFormData(p => ({...p, commitment: e.target.checked}))} className="mt-0.5" />
-                    <span>আমি রোজা রেখে অঙ্গীকার করছি যে প্রদানকৃত তথ্য সত্য।</span>
-                  </label>
+                {/* EXACT SCREENSHOT OATH BANNER */}
+                <div className="bg-[#FFF8F0] p-4 rounded-3xl border border-[#FDE6D2] space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="text-amber-600 font-extrabold text-2xl leading-none">❝</span>
+                    <label className="flex items-start gap-2.5 cursor-pointer flex-1">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.commitment} 
+                        onChange={e => setFormData(p => ({...p, commitment: e.target.checked}))} 
+                        className="mt-1 w-4 h-4 accent-amber-600 rounded" 
+                      />
+                      <div>
+                        <h4 className="font-extrabold text-stone-900 text-sm leading-snug">আমি অঙ্গীকার করছি</h4>
+                        <p className="text-xs text-stone-700 font-medium leading-relaxed mt-1">
+                          আমি রোজা রেখে অঙ্গীকার করছি যে উপরে যে সকল তথ্য পূরণ করেছি তা <span className="text-orange-600 font-bold">সঠিক ও সত্য</span>। যদি কোন তথ্য মিথ্যা প্রমাণিত হয়, তাহলে আমি এর জন্যায়ী থাকব।
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="bg-white/90 backdrop-blur-sm p-3.5 rounded-2xl border border-stone-200/60 shadow-sm space-y-1">
+                    <p className="text-xs text-stone-700 italic leading-relaxed font-medium">
+                      "তোমরা সত্যকে মিথ্যার সাথে মিশিয়ে দিও না এবং জেনে-শুনে সত্য গোপন করো না"
+                    </p>
+                    <p className="text-[11px] font-bold text-amber-600">
+                      (সূরা আল-বাক্বারাহ্, আয়াত ৪২)
+                    </p>
+                  </div>
                 </div>
 
-                <button disabled={isSubmitting || !formData.commitment} className="w-full py-3.5 bg-[#5A5A40] text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50">
+                <button disabled={isSubmitting || !formData.commitment} className="w-full py-3.5 bg-[#5A5A40] hover:bg-[#4a4a34] text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50 transition-all">
                   {isSubmitting ? "পাবলিশ হচ্ছে..." : "পাবলিশ করুন"}
                 </button>
               </form>
