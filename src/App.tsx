@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, MapPin, Utensils, Loader2, ExternalLink, Plus, X, 
   Clock, Heart, Share2, Bookmark, MessageSquare, Home, Compass, 
-  BookmarkCheck, User, Facebook, Code, Sparkles, ImagePlus
+  BookmarkCheck, User, Facebook, Code, Sparkles, ImagePlus, Send, CornerDownRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { findBiryaniPlaces } from './services/geminiService';
@@ -237,9 +237,21 @@ export default function App() {
   const [savedSpots, setSavedSpots] = useState<number[]>([]);
   
   const [selectedSpotForComment, setSelectedSpotForComment] = useState<any | null>(null);
-  const [userNameInput, setUserNameInput] = useState<string>('');
+  const [userNameInput, setUserNameInput] = useState<string>(() => localStorage.getItem('biryani_user_name') || '');
   const [commentInput, setCommentInput] = useState<string>('');
   const [shortcutSelect, setShortcutSelect] = useState<string>('');
+  const [replyTarget, setReplyTarget] = useState<any | null>(null);
+  const [replyInput, setReplyInput] = useState<string>('');
+  const [reactionLoading, setReactionLoading] = useState<string | null>(null);
+  const [commentSubmitting, setCommentSubmitting] = useState<boolean>(false);
+  const [visitorId] = useState<string>(() => {
+    const key = 'biryani_visitor_id';
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, id);
+    return id;
+  });
 
   const [formData, setFormData] = useState({
     mosque: '',
@@ -383,55 +395,232 @@ export default function App() {
     }));
   };
 
-  // রিয়েল-টাইমে ডাটাবেসে লাইক
+  // ==========================================
+  // PUBLIC LIKE / COMMENT / REPLY / REACTION
+  // ==========================================
+  const refreshSpotData = async (spotId?: number) => {
+    try {
+      const res = await fetch('/api/spots', { cache: 'no-store' });
+      const data = await res.json();
+      if (!data.success) return;
+
+      const spots = data.spots || [];
+      setUserSpots(spots);
+
+      if (spotId !== undefined) {
+        const updated = spots.find((s: any) => Number(s.id) === Number(spotId));
+        if (updated) {
+          setSelectedSpotForComment((prev: any) =>
+            prev && Number(prev.id) === Number(spotId) ? updated : prev
+          );
+        }
+      }
+      return spots;
+    } catch (err) {
+      console.error('Failed to refresh spots', err);
+    }
+  };
+
   const toggleLike = async (spotId: number) => {
     try {
       const res = await fetch('/api/spots/like', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spotId })
+        body: JSON.stringify({ spotId, visitorId })
       });
-      if (res.ok) {
-        fetchUserSpots();
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || 'Like failed');
       }
+
+      // Instant UI update; database remains the source of truth after refresh.
+      setUserSpots(prev => prev.map(spot =>
+        Number(spot.id) === Number(spotId)
+          ? {
+              ...spot,
+              likes_count: Number(data.likes_count ?? spot.likes_count ?? 0),
+              liked_by_me: Boolean(data.liked_by_me)
+            }
+          : spot
+      ));
+
+      setSelectedSpotForComment((prev: any) =>
+        prev && Number(prev.id) === Number(spotId)
+          ? {
+              ...prev,
+              likes_count: Number(data.likes_count ?? prev.likes_count ?? 0),
+              liked_by_me: Boolean(data.liked_by_me)
+            }
+          : prev
+      );
     } catch (e) {
-      console.error("Like failed", e);
+      console.error('Like failed', e);
+      alert('লাইক দিতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     }
   };
 
-  // রিয়েল-টাইমে ডাটাবেসে কমেন্ট সেভ
   const handleAddComment = async (spotId: number) => {
     const finalComment = shortcutSelect || commentInput.trim();
+
     if (!userNameInput.trim()) {
-      alert("অনুগ্রহ করে আপনার নাম দিন।");
+      alert('অনুগ্রহ করে আপনার নাম দিন।');
       return;
     }
     if (!finalComment) {
-      alert("কমেন্ট অথবা কোনো শর্টকাট অপশন নির্বাচন করুন।");
+      alert('কমেন্ট অথবা কোনো শর্টকাট অপশন নির্বাচন করুন।');
       return;
     }
 
+    setCommentSubmitting(true);
     try {
+      localStorage.setItem('biryani_user_name', userNameInput.trim());
+
       const res = await fetch('/api/spots/comment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           spotId,
           userName: userNameInput.trim(),
-          text: finalComment
+          text: finalComment,
+          visitorId
         })
       });
 
-      if (res.ok) {
-        setCommentInput('');
-        setShortcutSelect('');
-        await fetchUserSpots();
-        const updated = userSpots.find(s => s.id === spotId);
-        if (updated) setSelectedSpotForComment(updated);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || 'Comment failed');
       }
+
+      setCommentInput('');
+      setShortcutSelect('');
+
+      // IMPORTANT: use the freshly returned database data instead of the
+      // old React state. This fixes the comment disappearing after refresh/back.
+      const spots = await refreshSpotData(spotId);
+      const updated = spots?.find((s: any) => Number(s.id) === Number(spotId));
+      if (updated) setSelectedSpotForComment(updated);
     } catch (e) {
-      alert("কমেন্ট যোগ করতে সমস্যা হয়েছে");
+      console.error('Comment failed', e);
+      alert('কমেন্ট যোগ করতে সমস্যা হয়েছে।');
+    } finally {
+      setCommentSubmitting(false);
     }
+  };
+
+  const handleAddReply = async (spotId: number, commentId: number) => {
+    const text = replyInput.trim();
+
+    if (!userNameInput.trim()) {
+      alert('অনুগ্রহ করে আপনার নাম দিন।');
+      return;
+    }
+    if (!text) {
+      alert('রিপ্লাই লিখুন।');
+      return;
+    }
+
+    try {
+      localStorage.setItem('biryani_user_name', userNameInput.trim());
+
+      const res = await fetch('/api/spots/comment/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spotId,
+          commentId,
+          userName: userNameInput.trim(),
+          text,
+          visitorId
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || 'Reply failed');
+      }
+
+      setReplyInput('');
+      setReplyTarget(null);
+
+      const spots = await refreshSpotData(spotId);
+      const updated = spots?.find((s: any) => Number(s.id) === Number(spotId));
+      if (updated) setSelectedSpotForComment(updated);
+    } catch (e) {
+      console.error('Reply failed', e);
+      alert('রিপ্লাই যোগ করতে সমস্যা হয়েছে।');
+    }
+  };
+
+  const reactToComment = async (
+    spotId: number,
+    commentId: number,
+    reaction: string = 'like'
+  ) => {
+    const key = `comment-${commentId}-${reaction}`;
+    if (reactionLoading === key) return;
+
+    setReactionLoading(key);
+    try {
+      const res = await fetch('/api/spots/comment/react', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotId, commentId, reaction, visitorId })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || 'Reaction failed');
+      }
+
+      const spots = await refreshSpotData(spotId);
+      const updated = spots?.find((s: any) => Number(s.id) === Number(spotId));
+      if (updated) setSelectedSpotForComment(updated);
+    } catch (e) {
+      console.error('Comment reaction failed', e);
+      alert('রিঅ্যাক্ট দিতে সমস্যা হয়েছে।');
+    } finally {
+      setReactionLoading(null);
+    }
+  };
+
+  const reactToReply = async (
+    spotId: number,
+    replyId: number,
+    reaction: string = 'like'
+  ) => {
+    const key = `reply-${replyId}-${reaction}`;
+    if (reactionLoading === key) return;
+
+    setReactionLoading(key);
+    try {
+      const res = await fetch('/api/spots/comment/reply/react', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotId, replyId, reaction, visitorId })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || 'Reply reaction failed');
+      }
+
+      const spots = await refreshSpotData(spotId);
+      const updated = spots?.find((s: any) => Number(s.id) === Number(spotId));
+      if (updated) setSelectedSpotForComment(updated);
+    } catch (e) {
+      console.error('Reply reaction failed', e);
+      alert('রিঅ্যাক্ট দিতে সমস্যা হয়েছে।');
+    } finally {
+      setReactionLoading(null);
+    }
+  };
+
+  const openCommentModal = (spot: any) => {
+    setSelectedSpotForComment(spot);
+    setReplyTarget(null);
+    setReplyInput('');
+    // Keep the main comment draft intact when the modal is reopened.
   };
 
   const shareSpot = (spot: any) => {
@@ -554,12 +743,14 @@ export default function App() {
                               onClick={() => toggleLike(spot.id)}
                               className="flex items-center gap-1 text-xs font-semibold hover:text-red-500 transition-colors"
                             >
-                              <Heart size={16} className={cn(spot.likes_count > 0 && "fill-red-500 text-red-500")} />
+                              <Heart size={16} className={cn(
+  spot.liked_by_me ? "fill-red-500 text-red-500" : "text-stone-500"
+)} />
                               <span>{spot.likes_count || 0}</span>
                             </button>
 
                             <button 
-                              onClick={() => setSelectedSpotForComment(spot)}
+                              onClick={() => openCommentModal(spot)}
                               className="flex items-center gap-1 text-xs font-semibold hover:text-[#5A5A40] transition-colors"
                             >
                               <MessageSquare size={16} />
@@ -725,52 +916,205 @@ export default function App() {
         </button>
       </nav>
 
-      {/* Comment Modal */}
+      {/* ==========================================
+          PUBLIC COMMENT / REPLY / REACTION MODAL
+          ========================================== */}
       <AnimatePresence>
         {selectedSpotForComment && (
-          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center">
-            <motion.div 
-              initial={{ y: "100%" }}
+          <div
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center"
+            onClick={() => {
+              setSelectedSpotForComment(null);
+              setReplyTarget(null);
+              setReplyInput('');
+            }}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
               animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-white w-full max-w-md rounded-t-[2rem] p-5 space-y-4 max-h-[85vh] flex flex-col shadow-2xl"
+              exit={{ y: '100%' }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white w-full max-w-md rounded-t-[2rem] p-5 space-y-4 max-h-[90vh] flex flex-col shadow-2xl"
             >
               <div className="flex justify-between items-center border-b pb-3">
                 <div>
-                  <h3 className="font-bold text-sm text-stone-800">{selectedSpotForComment.mosque_name}</h3>
-                  <p className="text-[11px] text-stone-400">খাবারের মান ও রিভিউ দিন</p>
+                  <h3 className="font-bold text-sm text-stone-800">
+                    {selectedSpotForComment.mosque_name}
+                  </h3>
+                  <p className="text-[11px] text-stone-400">
+                    পাবলিক কমেন্ট • রিপ্লাই • রিঅ্যাকশন
+                  </p>
                 </div>
-                <button onClick={() => setSelectedSpotForComment(null)} className="p-1 hover:bg-stone-100 rounded-full"><X size={20} /></button>
+                <button
+                  onClick={() => {
+                    setSelectedSpotForComment(null);
+                    setReplyTarget(null);
+                    setReplyInput('');
+                  }}
+                  className="p-1.5 hover:bg-stone-100 rounded-full"
+                >
+                  <X size={20} />
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-2 py-2">
-                {(!selectedSpotForComment.comments || selectedSpotForComment.comments.length === 0) ? (
-                  <p className="text-xs text-stone-400 text-center py-6">এখনো কোনো কমেন্ট করা হয়নি। প্রথম কমেন্টটি আপনি দিন!</p>
+              <div className="flex-1 overflow-y-auto space-y-3 py-2">
+                {(!selectedSpotForComment.comments ||
+                  selectedSpotForComment.comments.length === 0) ? (
+                  <div className="text-center py-8">
+                    <MessageSquare className="mx-auto text-stone-300 mb-2" size={30} />
+                    <p className="text-xs text-stone-400">
+                      এখনো কোনো কমেন্ট করা হয়নি।
+                    </p>
+                    <p className="text-[10px] text-stone-300 mt-1">
+                      প্রথম কমেন্টটি আপনি দিন!
+                    </p>
+                  </div>
                 ) : (
-                  selectedSpotForComment.comments.map((c: any, i: number) => (
-                    <div key={i} className="bg-stone-50 p-3 rounded-2xl border border-stone-100 space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[11px] font-bold text-[#5A5A40] flex items-center gap-1">
-                          <User size={12} /> {c.userName || c.user_name}
-                        </span>
-                        <span className="text-[9px] text-stone-400">{c.date || "এখনই"}</span>
+                  selectedSpotForComment.comments.map((c: any, i: number) => {
+                    const commentId = Number(c.id ?? c.comment_id ?? i);
+                    const reactions = c.reactions || {};
+                    const replies = c.replies || [];
+
+                    return (
+                      <div
+                        key={commentId}
+                        className="bg-stone-50 p-3 rounded-2xl border border-stone-100 space-y-2"
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="text-[11px] font-bold text-[#5A5A40] flex items-center gap-1">
+                            <User size={12} />
+                            {c.userName || c.user_name || 'Anonymous'}
+                          </span>
+                          <span className="text-[9px] text-stone-400 whitespace-nowrap">
+                            {c.date || c.created_at || 'এখনই'}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-stone-700 font-medium leading-relaxed">
+                          {c.text}
+                        </p>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            onClick={() => reactToComment(selectedSpotForComment.id, commentId, 'like')}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all",
+                              c.liked_by_me
+                                ? "bg-red-50 text-red-500 border-red-200"
+                                : "bg-white text-stone-500 border-stone-200 hover:text-red-500"
+                            )}
+                            disabled={reactionLoading === `comment-${commentId}-like`}
+                          >
+                            <Heart
+                              size={12}
+                              className={cn(c.liked_by_me && "fill-red-500")}
+                            />
+                            {Number(reactions.like || c.likes_count || 0)}
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setReplyTarget(c);
+                              setReplyInput('');
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-white text-stone-500 border border-stone-200 hover:text-[#5A5A40]"
+                          >
+                            <CornerDownRight size={12} />
+                            রিপ্লাই
+                          </button>
+                        </div>
+
+                        {replies.length > 0 && (
+                          <div className="ml-3 pl-3 border-l-2 border-stone-200 space-y-2">
+                            {replies.map((r: any, ri: number) => {
+                              const replyId = Number(r.id ?? r.reply_id ?? `${commentId}${ri}`);
+                              const replyReactions = r.reactions || {};
+
+                              return (
+                                <div
+                                  key={replyId}
+                                  className="bg-white p-2.5 rounded-xl border border-stone-100"
+                                >
+                                  <div className="flex justify-between items-start gap-2">
+                                    <span className="text-[10px] font-bold text-[#5A5A40] flex items-center gap-1">
+                                      <User size={11} />
+                                      {r.userName || r.user_name || 'Anonymous'}
+                                    </span>
+                                    <span className="text-[8px] text-stone-400">
+                                      {r.date || r.created_at || 'এখনই'}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-[11px] text-stone-700 mt-1 leading-relaxed">
+                                    {r.text}
+                                  </p>
+
+                                  <div className="flex items-center gap-2 mt-1.5">
+                                    <button
+                                      onClick={() =>
+                                        reactToReply(selectedSpotForComment.id, replyId, 'like')
+                                      }
+                                      className={cn(
+                                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold border",
+                                        r.liked_by_me
+                                          ? "bg-red-50 text-red-500 border-red-200"
+                                          : "bg-stone-50 text-stone-500 border-stone-200"
+                                      )}
+                                      disabled={reactionLoading === `reply-${replyId}-like`}
+                                    >
+                                      <Heart
+                                        size={11}
+                                        className={cn(r.liked_by_me && "fill-red-500")}
+                                      />
+                                      {Number(replyReactions.like || r.likes_count || 0)}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {replyTarget && Number(replyTarget.id ?? replyTarget.comment_id) === commentId && (
+                          <div className="ml-3 flex gap-2 pt-1">
+                            <input
+                              type="text"
+                              value={replyInput}
+                              onChange={e => setReplyInput(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleAddReply(selectedSpotForComment.id, commentId);
+                                }
+                              }}
+                              placeholder={`@${c.userName || c.user_name || 'user'}-কে রিপ্লাই...`}
+                              className="flex-1 text-[11px] px-3 py-2 bg-white border border-stone-200 rounded-xl outline-none focus:ring-1 focus:ring-[#5A5A40]"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleAddReply(selectedSpotForComment.id, commentId)}
+                              className="bg-[#5A5A40] text-white px-3 rounded-xl active:scale-95"
+                            >
+                              <Send size={14} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-stone-700 font-medium">{c.text}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
               <div className="space-y-2.5 pt-2 border-t">
-                <input 
+                <input
                   type="text"
                   value={userNameInput}
                   onChange={e => setUserNameInput(e.target.value)}
                   placeholder="আপনার নাম লিখুন..."
-                  className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none"
+                  className="w-full text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-1 focus:ring-[#5A5A40]"
                 />
 
-                <select 
+                <select
                   value={shortcutSelect}
                   onChange={e => {
                     setShortcutSelect(e.target.value);
@@ -785,21 +1129,34 @@ export default function App() {
                 </select>
 
                 <div className="flex gap-2">
-                  <input 
+                  <input
                     type="text"
                     value={commentInput}
-                    disabled={!!shortcutSelect}
-                    onChange={e => setCommentInput(e.target.value)}
-                    placeholder={shortcutSelect ? "শর্টকাট সিলেক্ট করা হয়েছে" : "নিজের মন্তব্য লিখুন..."}
-                    className="flex-1 text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none disabled:bg-stone-100"
+                    onChange={e => {
+                      setCommentInput(e.target.value);
+                      if (e.target.value) setShortcutSelect('');
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAddComment(selectedSpotForComment.id);
+                      }
+                    }}
+                    placeholder="নিজের মন্তব্য লিখুন..."
+                    className="flex-1 text-xs px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-1 focus:ring-[#5A5A40]"
                   />
-                  <button 
+                  <button
                     onClick={() => handleAddComment(selectedSpotForComment.id)}
-                    className="bg-[#5A5A40] text-white px-4 text-xs font-bold rounded-xl active:scale-95 transition-transform"
+                    disabled={commentSubmitting}
+                    className="bg-[#5A5A40] text-white px-4 text-xs font-bold rounded-xl active:scale-95 transition-transform disabled:opacity-50"
                   >
-                    পোস্ট
+                    {commentSubmitting ? <Loader2 size={14} className="animate-spin" /> : 'পোস্ট'}
                   </button>
                 </div>
+
+                <p className="text-[9px] text-stone-400 text-center">
+                  এই কমেন্টটি পাবলিক থাকবে এবং অন্যরা এতে রিঅ্যাক্ট বা রিপ্লাই করতে পারবে।
+                </p>
               </div>
             </motion.div>
           </div>
